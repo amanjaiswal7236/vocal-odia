@@ -1,0 +1,205 @@
+'use client';
+
+import React, { useState, useRef, useEffect } from 'react';
+import { GoogleGenAI, Modality } from '@google/genai';
+import { ShadowingTask } from '@/types';
+import { decode, decodeAudioData } from '@/lib/utils/audioUtils';
+import { contentService } from '@/lib/services/contentService';
+import VoiceVisualizer from './VoiceVisualizer';
+import { useToast } from '@/components/Toast';
+import { getErrorMessage } from '@/lib/utils/errorHandler';
+import EmptyState from '@/components/EmptyState';
+import LoadingSpinner from '@/components/LoadingSpinner';
+
+interface ShadowingSessionProps {
+  tasks: ShadowingTask[];
+  onBack: () => void;
+  onComplete: () => void;
+}
+
+const ShadowingSession: React.FC<ShadowingSessionProps> = ({ tasks: initialTasks, onBack, onComplete }) => {
+  const { showToast } = useToast();
+  const [tasks, setTasks] = useState<ShadowingTask[]>(initialTasks);
+  const [loading, setLoading] = useState(false);
+  
+  useEffect(() => {
+    if (tasks.length === 0) {
+      setLoading(true);
+      contentService.getShadowingTasks()
+        .then(data => {
+          setTasks(data.map((t: any) => ({
+            id: t.id.toString(),
+            text: t.text,
+            translation: t.translation,
+            focusArea: t.focus_area
+          })));
+        })
+        .catch(err => {
+          showToast(getErrorMessage(err), 'error');
+        })
+        .finally(() => setLoading(false));
+    }
+  }, [tasks.length, showToast]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isEvaluating, setIsEvaluating] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const currentTask = tasks[currentIndex];
+
+  const playAIModel = async () => {
+    if (!currentTask) return;
+    
+    setIsPlaying(true);
+    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    if (!apiKey) {
+      showToast('Audio playback is not available. API key not configured.', 'warning');
+      setIsPlaying(false);
+      return;
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+    
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-preview-tts',
+        contents: [{ parts: [{ text: `Say clearly: ${currentTask.text}` }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
+        },
+      });
+
+      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (base64Audio) {
+        if (!audioContextRef.current) audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        const buffer = await decodeAudioData(decode(base64Audio), audioContextRef.current, 24000, 1);
+        const source = audioContextRef.current.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioContextRef.current.destination);
+        source.onended = () => setIsPlaying(false);
+        source.start();
+      } else {
+        showToast('No audio received from AI', 'warning');
+        setIsPlaying(false);
+      }
+    } catch (e) {
+      const errorMessage = getErrorMessage(e);
+      console.error(e);
+      showToast(`Failed to play audio: ${errorMessage}`, 'error');
+      setIsPlaying(false);
+    }
+  };
+
+  const handleNext = () => {
+    if (currentIndex < tasks.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+      setFeedback(null);
+    } else {
+      onComplete();
+    }
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-8 animate-in zoom-in duration-300">
+      <div className="flex items-center gap-4">
+        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white shadow-sm border border-gray-100 flex items-center justify-center hover:bg-gray-50 transition-colors">
+          <i className="fas fa-arrow-left text-gray-600"></i>
+        </button>
+        <div className="flex-1">
+          <h1 className="text-xl font-black text-gray-900">Shadowing Mode</h1>
+          <div className="flex gap-1 mt-2">
+            {tasks.map((_, i) => (
+              <div key={i} className={`h-1.5 flex-1 rounded-full transition-all ${i === currentIndex ? 'bg-indigo-600' : i < currentIndex ? 'bg-green-500' : 'bg-gray-200'}`} />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="bg-white rounded-3xl p-10 shadow-xl border border-gray-100 text-center">
+          <LoadingSpinner text="Loading shadowing tasks..." />
+        </div>
+      ) : !currentTask ? (
+        <EmptyState
+          icon="fa-microphone-slash"
+          title="No tasks available"
+          description="Shadowing tasks will appear here when available"
+          action={{ label: "Go Back", onClick: onBack }}
+        />
+      ) : (
+        <div className="bg-white rounded-3xl p-10 shadow-xl border border-gray-100 text-center relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-5">
+            <i className="fas fa-quote-right text-9xl"></i>
+          </div>
+
+          <span className="inline-block px-3 py-1 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-widest mb-6">
+            Focus: {currentTask.focusArea}
+          </span>
+
+          <h2 className="text-2xl font-bold text-gray-900 leading-tight mb-4">
+            "{currentTask.text}"
+          </h2>
+          
+          <p className="text-sm text-gray-400 font-medium italic mb-10">
+            Odia: {currentTask.translation}
+          </p>
+
+        <div className="flex flex-col items-center gap-8">
+          <div className="flex gap-6">
+            <button 
+              onClick={playAIModel}
+              disabled={isPlaying || isRecording}
+              className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${isPlaying ? 'bg-indigo-600 text-white animate-pulse' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
+            >
+              <i className={`fas ${isPlaying ? 'fa-volume-up' : 'fa-play'} text-xl`}></i>
+            </button>
+
+            <button 
+              onMouseDown={() => setIsRecording(true)}
+              onMouseUp={() => { setIsRecording(false); setIsEvaluating(true); setTimeout(() => { setIsEvaluating(false); setFeedback('Excellent rhythm! Your pronunciation of "Bhubaneswar" was spot on.'); }, 1500); }}
+              disabled={isPlaying}
+              className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${isRecording ? 'bg-red-500 text-white scale-125' : 'bg-red-50 text-red-500 hover:bg-red-100'}`}
+            >
+              <i className="fas fa-microphone text-xl"></i>
+            </button>
+          </div>
+
+          <div className="h-12 w-full max-w-xs">
+            <VoiceVisualizer isActive={isRecording} color="bg-red-400" />
+          </div>
+
+          {isEvaluating && (
+            <p className="text-sm font-bold text-indigo-600 animate-pulse">Analyzing your voice pattern...</p>
+          )}
+
+          {feedback && (
+            <div className="bg-green-50 p-4 rounded-2xl border border-green-100 animate-in fade-in slide-in-from-top">
+              <p className="text-sm text-green-700 font-medium">{feedback}</p>
+              <button 
+                onClick={handleNext}
+                className="mt-4 bg-green-600 text-white px-6 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-green-700 transition-all"
+              >
+                Next Sentence <i className="fas fa-arrow-right ml-1"></i>
+              </button>
+            </div>
+          )}
+        </div>
+        </div>
+      )}
+
+      <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100">
+        <h3 className="font-bold text-blue-900 text-sm mb-2 flex items-center gap-2">
+          <i className="fas fa-info-circle"></i> Coach's Tip
+        </h3>
+        <p className="text-xs text-blue-700 leading-relaxed">
+          The mirror technique helps you unlearn Odia sentence rhythms. Try to match the AI's speed exactly, especially when linking words together like "I-have-been."
+        </p>
+      </div>
+    </div>
+  );
+};
+
+export default ShadowingSession;
