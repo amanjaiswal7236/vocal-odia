@@ -20,10 +20,11 @@ interface AppContextType {
   error: string | null;
   loadContent: (userId?: number) => Promise<void>;
   setCurrentUser: (user: AuthUser | null) => void;
-  setScenarios: (scenarios: Scenario[]) => void;
-  setCourses: (courses: Course[]) => void;
-  setQuests: (quests: DailyQuest[]) => void;
-  setUsageStats: (stats: UsageStats) => void;
+  setScenarios: (scenarios: Scenario[] | ((prev: Scenario[]) => Scenario[])) => void;
+  setNuggets: (nuggets: DailyNugget[] | ((prev: DailyNugget[]) => DailyNugget[])) => void;
+  setCourses: (courses: Course[] | ((prev: Course[]) => Course[])) => void;
+  setQuests: (quests: DailyQuest[] | ((prev: DailyQuest[]) => DailyQuest[])) => void;
+  setUsageStats: (stats: UsageStats | ((prev: UsageStats) => UsageStats)) => void;
   refreshContent: () => Promise<void>;
 }
 
@@ -175,6 +176,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         loadContent,
         setCurrentUser,
         setScenarios,
+        setNuggets,
         setCourses,
         setQuests,
         setUsageStats,

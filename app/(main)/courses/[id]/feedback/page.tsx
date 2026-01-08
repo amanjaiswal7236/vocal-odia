@@ -6,7 +6,7 @@ import { GoogleGenAI, Type } from '@google/genai';
 import CourseFeedbackView from '@/components/CourseFeedbackView';
 import { authService } from '@/lib/services/authService';
 import { useAppContext } from '@/lib/context/AppContext';
-import { CourseFeedback } from '@/types';
+import { CourseFeedback, Course } from '@/types';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { useToast } from '@/components/Toast';
 import { getErrorMessage } from '@/lib/utils/errorHandler';
@@ -90,7 +90,7 @@ export default function CourseFeedbackPage() {
   const course = courses.find(c => c.id === feedback.courseId);
 
   const handleContinue = () => {
-    setCourses(prev => prev.map(c => 
+    setCourses((prev: Course[]) => prev.map(c => 
       c.prerequisiteId === feedback.courseId ? { ...c, isUnlocked: true } : c
     ));
     router.push('/courses');

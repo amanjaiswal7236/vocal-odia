@@ -4,17 +4,18 @@ import { handleApiError, retryRequest, AppError } from '@/lib/utils/errorHandler
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
-const getAuthHeaders = () => {
+const getAuthHeaders = (): Record<string, string> => {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   return token ? { 'Authorization': `Bearer ${token}` } : {};
 };
 
 const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+  const authHeaders = getAuthHeaders();
   const response = await fetch(url, {
     ...options,
     headers: {
-      ...getAuthHeaders(),
-      ...options.headers,
+      ...authHeaders,
+      ...(options.headers as Record<string, string> || {}),
     },
   });
 
