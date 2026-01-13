@@ -17,7 +17,7 @@ const CourseMap: React.FC<CourseMapProps> = ({ courses, onSelectLesson, onBack }
   return (
     <div className="space-y-8 animate-in slide-in-from-bottom duration-500 pb-12">
       <div className="flex items-center gap-4">
-        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white shadow-sm border border-gray-100 flex items-center justify-center hover:bg-gray-50 transition-colors">
+        <button type="button" onClick={onBack} className="w-10 h-10 rounded-full bg-white shadow-sm border border-gray-100 flex items-center justify-center hover:bg-gray-50 transition-colors">
           <i className="fas fa-arrow-left text-gray-600"></i>
         </button>
         <div>
@@ -31,8 +31,13 @@ const CourseMap: React.FC<CourseMapProps> = ({ courses, onSelectLesson, onBack }
         {courses.map((course) => (
           <button
             key={course.id}
+            type="button"
             disabled={!course.isUnlocked}
-            onClick={() => setSelectedCourseId(course.id)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setSelectedCourseId(course.id);
+            }}
             className={`flex-shrink-0 p-5 rounded-2xl border-2 transition-all w-64 ${
               selectedCourseId === course.id 
                 ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' 
@@ -70,6 +75,7 @@ const CourseMap: React.FC<CourseMapProps> = ({ courses, onSelectLesson, onBack }
                 {module.lessons.map((lesson) => (
                   <button
                     key={lesson.id}
+                    type="button"
                     onClick={() => onSelectLesson(selectedCourse.id, lesson)}
                     className={`p-6 rounded-2xl border text-left transition-all ${
                       lesson.completed 

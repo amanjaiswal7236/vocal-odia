@@ -27,6 +27,7 @@ export interface Scenario {
   description: string;
   icon: string;
   prompt: string;
+  image?: string;
   isCourseLesson?: boolean;
 }
 
@@ -89,6 +90,7 @@ export interface UsageStats {
   sessionsCount: number;
   lastActive: number;
   errorCount: number;
+  uniqueUsers?: number;
 }
 
 export interface UserUsage {
@@ -100,6 +102,18 @@ export interface UserUsage {
   lastActive: number;
   streak: number;
   mistakesFixed: string[];
+}
+
+export interface UserSession {
+  id: string;
+  scenarioId: string | null;
+  scenarioTitle: string;
+  isCourseLesson: boolean;
+  courseId: string | null;
+  tokensUsed: number;
+  durationSeconds: number;
+  startedAt: number;
+  endedAt: number | null;
 }
 
 export interface TranscriptionItem {

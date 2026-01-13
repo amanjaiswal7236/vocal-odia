@@ -238,6 +238,68 @@ export const contentService = {
     } catch (error) {
       throw new AppError('Failed to delete nugget. Please try again.', 'DELETE_NUGGET_ERROR');
     }
+  },
+
+  // Admin methods for stats and users
+  async getAdminStats() {
+    try {
+      const response = await retryRequest(
+        () => fetchWithAuth(`${API_URL}/content/stats/admin`),
+        2
+      );
+      return response.json();
+    } catch (error) {
+      throw new AppError('Failed to load admin statistics. Please try again.', 'FETCH_ADMIN_STATS_ERROR');
+    }
+  },
+
+  async getAllUsers() {
+    try {
+      const response = await retryRequest(
+        () => fetchWithAuth(`${API_URL}/content/users`),
+        2
+      );
+      return response.json();
+    } catch (error) {
+      throw new AppError('Failed to load users. Please try again.', 'FETCH_USERS_ERROR');
+    }
+  },
+
+  async getUserSessions(userId: number) {
+    try {
+      const response = await retryRequest(
+        () => fetchWithAuth(`${API_URL}/content/users/${userId}/sessions`),
+        2
+      );
+      return response.json();
+    } catch (error) {
+      throw new AppError('Failed to load user sessions. Please try again.', 'FETCH_USER_SESSIONS_ERROR');
+    }
+  },
+
+  async recordSession(data: {
+    scenarioId: string | null;
+    scenarioTitle: string;
+    isCourseLesson: boolean;
+    courseId: string | null;
+    tokensUsed: number;
+    durationSeconds: number;
+    startedAt: number;
+  }) {
+    try {
+      const response = await fetchWithAuth(`${API_URL}/content/sessions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+      });
+      return response.json();
+    } catch (error) {
+      // Silently fail session recording to not interrupt user experience
+      console.error('Failed to record session:', error);
+      return { success: false };
+    }
   }
 };
 

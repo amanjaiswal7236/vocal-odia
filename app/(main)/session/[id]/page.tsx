@@ -17,6 +17,7 @@ export default function SessionPage() {
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
+  const [sessionStartTime] = useState<number>(Date.now());
 
   useEffect(() => {
     if (!authService.isAuthenticated()) {
@@ -31,16 +32,12 @@ export default function SessionPage() {
     console.log('Available scenarios:', scenarios.map(s => ({ id: s.id, title: s.title })));
     console.log('Course ID from query:', courseIdFromQuery);
     
-    // First check scenarios (prioritize regular scenarios over course lessons)
-    let foundScenario: Scenario | null = scenarios.find(s => s.id === scenarioId) || null;
+    let foundScenario: Scenario | null = null;
     let courseId: string | null = courseIdFromQuery || null;
     
-    if (foundScenario) {
-      console.log('Found scenario in scenarios list:', foundScenario.title);
-    }
-    
-    // If not found in scenarios and there's a courseId query param, check if it's a course lesson
-    if (!foundScenario && courseIdFromQuery) {
+    // If there's a courseId query param, prioritize checking course lessons FIRST
+    // This ensures course lessons are not mistaken for scenarios with the same ID
+    if (courseIdFromQuery) {
       for (const course of courses) {
         if (course.id === courseIdFromQuery) {
           for (const module of course.modules) {
@@ -61,6 +58,18 @@ export default function SessionPage() {
           }
           if (foundScenario) break;
         }
+      }
+    }
+    
+    // If not found in course lessons, check scenarios (only if no courseId was provided)
+    if (!foundScenario) {
+      const scenarioMatch = scenarios.find(s => s.id === scenarioId);
+      if (scenarioMatch) {
+        foundScenario = {
+          ...scenarioMatch,
+          image: scenarioMatch.image || undefined
+        };
+        console.log('Found scenario in scenarios list:', foundScenario.title, 'Image:', foundScenario.image);
       }
     }
     
@@ -111,6 +120,21 @@ export default function SessionPage() {
   }, [params.id, scenarios, courses, router, searchParams]);
 
   const handleEnd = async (estimatedTokens?: number) => {
+    const durationSeconds = Math.floor((Date.now() - sessionStartTime) / 1000);
+    
+    // Record session in database
+    if (currentUser && scenario) {
+      await contentService.recordSession({
+        scenarioId: scenario.id,
+        scenarioTitle: scenario.title,
+        isCourseLesson: scenario.isCourseLesson || false,
+        courseId: activeCourseId || null,
+        tokensUsed: estimatedTokens || 0,
+        durationSeconds,
+        startedAt: sessionStartTime
+      });
+    }
+    
     if (estimatedTokens && currentUser) {
       // Update quest progress
       const quests = await contentService.getQuests(parseInt(currentUser.id)).catch(() => []);

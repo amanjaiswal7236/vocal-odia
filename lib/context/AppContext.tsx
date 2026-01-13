@@ -73,7 +73,11 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
       ]);
 
       if (scenariosData.status === 'fulfilled') {
-        setScenarios(scenariosData.value.map((s: any) => ({ ...s, id: s.id.toString() })));
+        setScenarios(scenariosData.value.map((s: any) => ({ 
+          ...s, 
+          id: s.id.toString(),
+          image: s.image || undefined
+        })));
       } else {
         console.error('Failed to load scenarios:', scenariosData.reason);
         showToast('Failed to load some scenarios', 'warning');
@@ -145,16 +149,33 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const user = authService.getUser();
     if (user && authService.isAuthenticated()) {
       setCurrentUser(user);
-      setUsersUsage([{
-        id: user.id,
-        name: user.name,
-        avatar: user.avatar,
-        tokens: user.tokens,
-        sessions: user.sessions,
-        lastActive: user.lastActive,
-        streak: user.streak,
-        mistakesFixed: user.mistakesFixed || []
-      }]);
+      
+      // Load admin data if user is admin
+      if (user.role === 'admin') {
+        Promise.allSettled([
+          contentService.getAdminStats(),
+          contentService.getAllUsers()
+        ]).then(([statsResult, usersResult]) => {
+          if (statsResult.status === 'fulfilled') {
+            setUsageStats(statsResult.value);
+          }
+          if (usersResult.status === 'fulfilled') {
+            setUsersUsage(usersResult.value);
+          }
+        });
+      } else {
+        setUsersUsage([{
+          id: user.id,
+          name: user.name,
+          avatar: user.avatar,
+          tokens: user.tokens,
+          sessions: user.sessions,
+          lastActive: user.lastActive,
+          streak: user.streak,
+          mistakesFixed: user.mistakesFixed || []
+        }]);
+      }
+      
       loadContent(parseInt(user.id));
     } else {
       setLoading(false);

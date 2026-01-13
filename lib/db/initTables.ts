@@ -14,6 +14,23 @@ export const initContentTables = async () => {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    
+    // Add image column if it doesn't exist (for existing databases)
+    try {
+      const columnCheck = await query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'scenarios' AND column_name = 'image'
+      `);
+      
+      if (columnCheck.rows.length === 0) {
+        await query('ALTER TABLE scenarios ADD COLUMN image TEXT');
+        console.log('✓ Added image column to scenarios table');
+      }
+    } catch (error: any) {
+      // Column might already exist or table doesn't exist yet
+      console.log('Image column check:', error.message);
+    }
 
     // Courses table
     await query(`
@@ -117,6 +134,24 @@ export const initContentTables = async () => {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // User sessions table to track conversation sessions
+    await query(`
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        scenario_id VARCHAR(255),
+        scenario_title VARCHAR(255),
+        is_course_lesson BOOLEAN DEFAULT false,
+        course_id VARCHAR(255),
+        tokens_used INTEGER DEFAULT 0,
+        duration_seconds INTEGER DEFAULT 0,
+        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        ended_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✓ User sessions table created/verified');
 
     console.log('Content tables initialized');
   } catch (error) {

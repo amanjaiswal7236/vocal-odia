@@ -29,7 +29,7 @@ export async function GET() {
     return NextResponse.json({ 
       success: true, 
       message: 'Database initialized successfully',
-      tables: ['users', 'scenarios', 'daily_nuggets', 'courses', 'modules', 'lessons', 'badges', 'quests']
+      tables: ['users', 'scenarios', 'daily_nuggets', 'courses', 'modules', 'lessons', 'badges', 'quests', 'user_sessions', 'user_lesson_progress', 'shadowing_tasks']
     });
   } catch (error: any) {
     console.error('Database initialization error:', error);
@@ -42,6 +42,8 @@ export async function GET() {
           ? 'PostgreSQL is not running. Please start it and try again.'
           : error.code === '3D000'
           ? `Database "${process.env.DB_NAME || 'vocalodia'}" does not exist. Please create it first with: CREATE DATABASE vocalodia;`
+          : error.code === '42501'
+          ? 'Permission denied. The database user needs CREATE permission. Run: GRANT ALL PRIVILEGES ON DATABASE vocal_odia TO vocal_user; GRANT ALL ON SCHEMA public TO vocal_user;'
           : undefined
       },
       { status: 500 }
