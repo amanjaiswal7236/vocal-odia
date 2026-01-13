@@ -86,8 +86,8 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       <div className="grid md:grid-cols-3 gap-8">
         <div className="md:col-span-2 space-y-8">
-          {/* Quests Section */}
-          <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+          {/* Quests Section - Hidden */}
+          {/* <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
             <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-gray-900">
               <i className="fas fa-star text-yellow-500"></i> Daily Quests
             </h2>
@@ -119,7 +119,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 ))
               )}
             </div>
-          </div>
+          </div> */}
 
           {/* Scenarios List */}
           <div className="space-y-6">
@@ -161,7 +161,8 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         <div className="space-y-8">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          {/* Daily Nugget Section - Hidden */}
+          {/* <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
             <h2 className="font-bold mb-4 flex items-center gap-2"><i className="fas fa-lightbulb text-yellow-500"></i> Daily Nugget</h2>
             {nuggets.length === 0 ? (
               <EmptyState
@@ -177,9 +178,10 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </div>
               ))
             )}
-          </div>
+          </div> */}
 
-          <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100">
+          {/* Milestones Section - Hidden */}
+          {/* <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100">
             <h2 className="font-bold mb-4 flex items-center gap-2 text-indigo-900"><i className="fas fa-trophy text-indigo-600"></i> Milestones</h2>
             {badgesLoading ? (
               <LoadingSpinner size="sm" />
@@ -199,7 +201,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               </div>
               ))
             )}
-          </div>
+          </div> */}
         </div>
       </div>
     </div>

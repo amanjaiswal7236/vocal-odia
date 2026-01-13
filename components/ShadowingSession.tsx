@@ -45,27 +45,41 @@ const ShadowingSession: React.FC<ShadowingSessionProps> = ({ tasks: initialTasks
   const [isRecording, setIsRecording] = useState(false);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [showWordPractice, setShowWordPractice] = useState(false);
+  const [selectedWord, setSelectedWord] = useState<string | null>(null);
+  const [isPlayingWord, setIsPlayingWord] = useState(false);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const currentTask = tasks[currentIndex];
+  
+  // Extract words from the sentence for pronunciation practice
+  const words = currentTask ? currentTask.text.toLowerCase().replace(/[.,!?;:]/g, '').split(/\s+/).filter(w => w.length > 0) : [];
 
-  const playAIModel = async () => {
-    if (!currentTask) return;
+  const playAIModel = async (text?: string) => {
+    const textToPlay = text || currentTask?.text;
+    if (!textToPlay) return;
     
-    setIsPlaying(true);
+    if (text) {
+      setIsPlayingWord(true);
+    } else {
+      setIsPlaying(true);
+    }
+    
     const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
     if (!apiKey) {
       showToast('Audio playback is not available. API key not configured.', 'warning');
       setIsPlaying(false);
+      setIsPlayingWord(false);
       return;
     }
 
     const ai = new GoogleGenAI({ apiKey });
     
     try {
+      const prompt = text ? `Pronounce this word clearly and slowly: ${text}` : `Say clearly: ${textToPlay}`;
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-preview-tts',
-        contents: [{ parts: [{ text: `Say clearly: ${currentTask.text}` }] }],
+        contents: [{ parts: [{ text: prompt }] }],
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
@@ -79,24 +93,39 @@ const ShadowingSession: React.FC<ShadowingSessionProps> = ({ tasks: initialTasks
         const source = audioContextRef.current.createBufferSource();
         source.buffer = buffer;
         source.connect(audioContextRef.current.destination);
-        source.onended = () => setIsPlaying(false);
+        source.onended = () => {
+          if (text) {
+            setIsPlayingWord(false);
+          } else {
+            setIsPlaying(false);
+          }
+        };
         source.start();
       } else {
         showToast('No audio received from AI', 'warning');
         setIsPlaying(false);
+        setIsPlayingWord(false);
       }
     } catch (e) {
       const errorMessage = getErrorMessage(e);
       console.error(e);
       showToast(`Failed to play audio: ${errorMessage}`, 'error');
       setIsPlaying(false);
+      setIsPlayingWord(false);
     }
+  };
+
+  const handleWordClick = (word: string) => {
+    setSelectedWord(word);
+    playAIModel(word);
   };
 
   const handleNext = () => {
     if (currentIndex < tasks.length - 1) {
       setCurrentIndex(currentIndex + 1);
       setFeedback(null);
+      setShowWordPractice(false);
+      setSelectedWord(null);
     } else {
       onComplete();
     }
@@ -143,14 +172,56 @@ const ShadowingSession: React.FC<ShadowingSessionProps> = ({ tasks: initialTasks
             "{currentTask.text}"
           </h2>
           
-          <p className="text-sm text-gray-400 font-medium italic mb-10">
+          <p className="text-sm text-gray-400 font-medium italic mb-6">
             Odia: {currentTask.translation}
           </p>
+
+          {/* Word Practice Toggle */}
+          <div className="mb-8">
+            <button
+              onClick={() => setShowWordPractice(!showWordPractice)}
+              className="text-sm font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-2 mx-auto"
+            >
+              <i className={`fas ${showWordPractice ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>
+              <span>{showWordPractice ? 'Hide' : 'Practice'} Word Pronunciation</span>
+            </button>
+          </div>
+
+          {/* Word Pronunciation Practice */}
+          {showWordPractice && (
+            <div className="mb-8 p-6 bg-indigo-50 rounded-2xl border border-indigo-100">
+              <h3 className="text-sm font-bold text-indigo-900 mb-4 flex items-center gap-2">
+                <i className="fas fa-volume-up"></i>
+                Click on words to hear pronunciation
+              </h3>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {words.map((word, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleWordClick(word)}
+                    disabled={isPlayingWord}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                      selectedWord === word && isPlayingWord
+                        ? 'bg-indigo-600 text-white animate-pulse'
+                        : selectedWord === word
+                        ? 'bg-indigo-200 text-indigo-900'
+                        : 'bg-white text-gray-700 hover:bg-indigo-100 border border-indigo-200'
+                    }`}
+                  >
+                    {word}
+                    {selectedWord === word && isPlayingWord && (
+                      <i className="fas fa-volume-up ml-2"></i>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
         <div className="flex flex-col items-center gap-8">
           <div className="flex gap-6">
             <button 
-              onClick={playAIModel}
+              onClick={() => playAIModel()}
               disabled={isPlaying || isRecording}
               className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${isPlaying ? 'bg-indigo-600 text-white animate-pulse' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
             >
