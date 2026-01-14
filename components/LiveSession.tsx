@@ -29,6 +29,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
   const [aiHasSpokenFirst, setAiHasSpokenFirst] = useState(false);
   const [isWaitingForAiGreeting, setIsWaitingForAiGreeting] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const isPausedRef = useRef(false); // Use ref to avoid stale closures in callbacks
   const descriptionAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const descriptionSpeechSynthesisRef = useRef<SpeechSynthesisUtterance | null>(null);
   const hasSpokenDescriptionRef = useRef(false);
@@ -123,7 +124,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
 
                 // Only send audio input if mic is enabled (after AI speaks first) and not paused
                 sessionPromise.then((session) => {
-                  if (session?.sendRealtimeInput && micInputEnabledRef.current && !isPaused) {
+                  if (session?.sendRealtimeInput && micInputEnabledRef.current && !isPausedRef.current) {
                     session.sendRealtimeInput({ media: pcmBlob });
                   }
                 });
@@ -139,7 +140,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
           onmessage: async (message: LiveServerMessage) => {
             // 1. SEQUENTIAL AUDIO PROCESSING
             const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-            if (base64Audio && !isPaused) {
+            if (base64Audio && !isPausedRef.current) {
               processingQueueRef.current = processingQueueRef.current.then(async () => {
                 try {
                   const ctx = outputAudioContextRef.current;
@@ -827,6 +828,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
 
   const handlePause = () => {
     setIsPaused(true);
+    isPausedRef.current = true;
     // Remember if mic was enabled before pause
     wasMicEnabledBeforePause.current = micInputEnabledRef.current;
     // Temporarily disable mic input
@@ -845,6 +847,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
 
   const handleResume = () => {
     setIsPaused(false);
+    isPausedRef.current = false;
     // Restore mic state if it was enabled before pause
     if (wasMicEnabledBeforePause.current) {
       micInputEnabledRef.current = true;
