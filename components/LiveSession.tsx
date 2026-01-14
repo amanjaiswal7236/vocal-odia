@@ -28,6 +28,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
   const [conversationStarted, setConversationStarted] = useState(false);
   const [aiHasSpokenFirst, setAiHasSpokenFirst] = useState(false);
   const [isWaitingForAiGreeting, setIsWaitingForAiGreeting] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const descriptionAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const descriptionSpeechSynthesisRef = useRef<SpeechSynthesisUtterance | null>(null);
   const hasSpokenDescriptionRef = useRef(false);
@@ -36,6 +37,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
   const descriptionTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Timeout to ensure button appears
   const micInputEnabledRef = useRef(false); // Control when microphone input is sent
   const isWaitingForAiGreetingRef = useRef(false); // Use ref to avoid stale closures
+  const wasMicEnabledBeforePause = useRef(false); // Remember mic state before pause
 
   // Debug: Log scenario image
   useEffect(() => {
@@ -119,9 +121,9 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
                 const volume = inputData.reduce((acc, v) => acc + Math.abs(v), 0) / inputData.length;
                 setIsUserSpeaking(volume > 0.01);
 
-                // Only send audio input if mic is enabled (after AI speaks first)
+                // Only send audio input if mic is enabled (after AI speaks first) and not paused
                 sessionPromise.then((session) => {
-                  if (session?.sendRealtimeInput && micInputEnabledRef.current) {
+                  if (session?.sendRealtimeInput && micInputEnabledRef.current && !isPaused) {
                     session.sendRealtimeInput({ media: pcmBlob });
                   }
                 });
@@ -137,7 +139,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
           onmessage: async (message: LiveServerMessage) => {
             // 1. SEQUENTIAL AUDIO PROCESSING
             const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-            if (base64Audio) {
+            if (base64Audio && !isPaused) {
               processingQueueRef.current = processingQueueRef.current.then(async () => {
                 try {
                   const ctx = outputAudioContextRef.current;
@@ -823,6 +825,39 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
     };
   }, []);
 
+  const handlePause = () => {
+    setIsPaused(true);
+    // Remember if mic was enabled before pause
+    wasMicEnabledBeforePause.current = micInputEnabledRef.current;
+    // Temporarily disable mic input
+    micInputEnabledRef.current = false;
+    // Stop all playing audio
+    sourcesRef.current.forEach(s => {
+      try {
+        s.stop();
+      } catch (e) {
+        // Ignore errors
+      }
+    });
+    sourcesRef.current.clear();
+    setIsAiSpeaking(false);
+  };
+
+  const handleResume = () => {
+    setIsPaused(false);
+    // Restore mic state if it was enabled before pause
+    if (wasMicEnabledBeforePause.current) {
+      micInputEnabledRef.current = true;
+    }
+    // Resume audio context if needed
+    if (outputAudioContextRef.current?.state === 'suspended') {
+      outputAudioContextRef.current.resume();
+    }
+    if (audioContextRef.current?.state === 'suspended') {
+      audioContextRef.current.resume();
+    }
+  };
+
   const handleEnd = () => {
     const estimatedTokens = Math.ceil(totalCharsTracked.current / 4) + 100;
     onEnd(estimatedTokens, transcriptions);
@@ -970,10 +1005,23 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
           </span>
           <h2 className="text-xl font-bold">{scenario.title}</h2>
         </div>
-        <button onClick={handleEnd} className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors flex items-center gap-2 px-4">
-          <span className="text-xs font-bold uppercase">Finish</span>
-          <i className="fas fa-check"></i>
-        </button>
+        <div className="flex items-center gap-3">
+          {isPaused ? (
+            <button onClick={handleResume} className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors flex items-center gap-2 px-4">
+              <span className="text-xs font-bold uppercase">Resume</span>
+              <i className="fas fa-play"></i>
+            </button>
+          ) : (
+            <button onClick={handlePause} className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors flex items-center gap-2 px-4">
+              <span className="text-xs font-bold uppercase">Pause</span>
+              <i className="fas fa-pause"></i>
+            </button>
+          )}
+          <button onClick={handleEnd} className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors flex items-center gap-2 px-4">
+            <span className="text-xs font-bold uppercase">Finish</span>
+            <i className="fas fa-check"></i>
+          </button>
+        </div>
       </div>
       
       {/* AI Speaking First Indicator */}
@@ -984,6 +1032,19 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
             <div>
               <p className="text-sm font-bold text-indigo-900">AI Coach is speaking first...</p>
               <p className="text-xs text-indigo-700 mt-1">Please wait for the AI to finish before you speak.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Paused Indicator */}
+      {isPaused && (
+        <div className="mx-6 mt-4 bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-lg">
+          <div className="flex items-center gap-3">
+            <i className="fas fa-pause text-yellow-600"></i>
+            <div>
+              <p className="text-sm font-bold text-yellow-900">Conversation Paused</p>
+              <p className="text-xs text-yellow-700 mt-1">Click Resume to continue the conversation.</p>
             </div>
           </div>
         </div>
@@ -1031,7 +1092,8 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
           </div>
         </div>
         <p className="text-gray-500 text-sm font-medium italic">
-          {!isReady ? "Connecting..." : 
+          {isPaused ? "Conversation paused. Click Resume to continue." :
+           !isReady ? "Connecting..." : 
            isWaitingForAiGreeting ? "AI Coach is introducing the scenario..." :
            isAiSpeaking ? "Coach is speaking..." : 
            !micInputEnabledRef.current ? "Waiting for AI to speak first..." :
