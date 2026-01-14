@@ -11,7 +11,7 @@ import { getErrorMessage } from '@/lib/utils/errorHandler';
 
 interface LiveSessionProps {
   scenario: Scenario;
-  onEnd: (estimatedTokens?: number) => void;
+  onEnd: (estimatedTokens?: number, transcriptions?: TranscriptionItem[]) => void;
 }
 
 const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
@@ -64,6 +64,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
   const currentInputTranscription = useRef('');
   const currentOutputTranscription = useRef('');
   const totalCharsTracked = useRef(0);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const initializeAudio = async () => {
     try {
@@ -176,11 +177,33 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
               });
             }
 
-            // 2. TRANSCRIPTION LOGIC
+            // 2. TRANSCRIPTION LOGIC - Real-time updates
             const outputText = message.serverContent?.outputTranscription?.text;
             if (outputText) {
               currentOutputTranscription.current += outputText;
               totalCharsTracked.current += outputText.length;
+              
+              // Update transcriptions in real-time for AI speech
+              setTranscriptions(prev => {
+                const newTranscriptions = [...prev];
+                const lastIndex = newTranscriptions.length - 1;
+                
+                // If last item is an AI message, update it (real-time transcription)
+                if (lastIndex >= 0 && newTranscriptions[lastIndex].sender === 'ai') {
+                  newTranscriptions[lastIndex] = {
+                    ...newTranscriptions[lastIndex],
+                    text: currentOutputTranscription.current
+                  };
+                } else {
+                  // Add new AI transcription item
+                  newTranscriptions.push({
+                    text: currentOutputTranscription.current,
+                    sender: 'ai',
+                    timestamp: Date.now()
+                  });
+                }
+                return newTranscriptions;
+              });
               
               // If AI is speaking and we're waiting for the initial greeting, mark it as done
               if (isWaitingForAiGreetingRef.current && !aiHasSpokenFirst) {
@@ -193,15 +216,75 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
             if (inputText) {
               currentInputTranscription.current += inputText;
               totalCharsTracked.current += inputText.length;
+              
+              // Update transcriptions in real-time for user speech
+              setTranscriptions(prev => {
+                const newTranscriptions = [...prev];
+                const lastIndex = newTranscriptions.length - 1;
+                
+                // If last item is a user message, update it (real-time transcription)
+                if (lastIndex >= 0 && newTranscriptions[lastIndex].sender === 'user') {
+                  newTranscriptions[lastIndex] = {
+                    ...newTranscriptions[lastIndex],
+                    text: currentInputTranscription.current
+                  };
+                } else {
+                  // Add new user transcription item
+                  newTranscriptions.push({
+                    text: currentInputTranscription.current,
+                    sender: 'user',
+                    timestamp: Date.now()
+                  });
+                }
+                return newTranscriptions;
+              });
             }
 
             if (message.serverContent?.turnComplete) {
+              // Finalize transcriptions when turn is complete
               if (currentInputTranscription.current) {
-                setTranscriptions(prev => [...prev, { text: currentInputTranscription.current, sender: 'user', timestamp: Date.now() }]);
+                setTranscriptions(prev => {
+                  const newTranscriptions = [...prev];
+                  const lastIndex = newTranscriptions.length - 1;
+                  
+                  // Update the last user message if it exists, otherwise add new one
+                  if (lastIndex >= 0 && newTranscriptions[lastIndex].sender === 'user') {
+                    newTranscriptions[lastIndex] = {
+                      ...newTranscriptions[lastIndex],
+                      text: currentInputTranscription.current
+                    };
+                  } else {
+                    newTranscriptions.push({
+                      text: currentInputTranscription.current,
+                      sender: 'user',
+                      timestamp: Date.now()
+                    });
+                  }
+                  return newTranscriptions;
+                });
                 currentInputTranscription.current = '';
               }
+              
               if (currentOutputTranscription.current) {
-                setTranscriptions(prev => [...prev, { text: currentOutputTranscription.current, sender: 'ai', timestamp: Date.now() }]);
+                setTranscriptions(prev => {
+                  const newTranscriptions = [...prev];
+                  const lastIndex = newTranscriptions.length - 1;
+                  
+                  // Update the last AI message if it exists, otherwise add new one
+                  if (lastIndex >= 0 && newTranscriptions[lastIndex].sender === 'ai') {
+                    newTranscriptions[lastIndex] = {
+                      ...newTranscriptions[lastIndex],
+                      text: currentOutputTranscription.current
+                    };
+                  } else {
+                    newTranscriptions.push({
+                      text: currentOutputTranscription.current,
+                      sender: 'ai',
+                      timestamp: Date.now()
+                    });
+                  }
+                  return newTranscriptions;
+                });
                 currentOutputTranscription.current = '';
                 
                 // After AI finishes speaking the first time, enable microphone input
@@ -726,6 +809,13 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
     }
   }, [conversationStarted]);
 
+  // Auto-scroll to bottom when new transcriptions arrive
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [transcriptions]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -735,7 +825,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
 
   const handleEnd = () => {
     const estimatedTokens = Math.ceil(totalCharsTracked.current / 4) + 100;
-    onEnd(estimatedTokens);
+    onEnd(estimatedTokens, transcriptions);
   };
 
   // Show description phase
@@ -917,6 +1007,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
           </div>
         ))}
         {error && <div className="p-4 bg-red-50 text-red-600 rounded-xl border border-red-100 text-center">{error}</div>}
+        <div ref={chatEndRef} />
       </div>
 
       {/* Footer Visualizer */}

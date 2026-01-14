@@ -1,17 +1,9 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ToastProvider } from "@/components/Toast";
 import { AppProvider } from "@/lib/context/AppContext";
 import Navigation from "@/components/Navigation";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-  fallback: ["system-ui", "arial"],
-});
 
 export const metadata: Metadata = {
   title: "VocalOdia - Odia-English Voice Tutor",
@@ -28,7 +20,7 @@ export default function RootLayout({
       <head>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
       </head>
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body className="font-sans antialiased">
         <ErrorBoundary>
           <ToastProvider>
             <AppProvider>

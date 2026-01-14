@@ -10,6 +10,7 @@ interface DashboardProps {
   onStartScenario: (scenario: Scenario) => void;
   onOpenCourse: () => void;
   onStartShadowing: () => void;
+  onViewSessions: () => void;
   scenarios: Scenario[];
   nuggets: DailyNugget[];
   course: Course;
@@ -20,6 +21,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   onStartScenario, 
   onOpenCourse, 
   onStartShadowing,
+  onViewSessions,
   scenarios, 
   nuggets, 
   course, 
@@ -62,6 +64,9 @@ const Dashboard: React.FC<DashboardProps> = ({
               </button>
               <button onClick={onStartShadowing} className="bg-white/10 backdrop-blur-sm border border-white/30 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-white/20 transition-all flex items-center gap-2">
                 <i className="fas fa-repeat"></i> Shadowing
+              </button>
+              <button onClick={onViewSessions} className="bg-white/10 backdrop-blur-sm border border-white/30 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-white/20 transition-all flex items-center gap-2">
+                <i className="fas fa-history"></i> Sessions
               </button>
             </div>
           </div>

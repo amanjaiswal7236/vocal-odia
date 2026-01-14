@@ -5,7 +5,7 @@ import { requireAuth } from '@/lib/auth/middleware';
 export async function POST(req: NextRequest) {
   try {
     const user = requireAuth(req);
-    const { scenarioId, scenarioTitle, isCourseLesson, courseId, tokensUsed, durationSeconds, startedAt } = await req.json();
+    const { scenarioId, scenarioTitle, isCourseLesson, courseId, tokensUsed, durationSeconds, startedAt, messages } = await req.json();
     
     // Insert session record
     // Convert startedAt from milliseconds to seconds for PostgreSQL
@@ -35,6 +35,23 @@ export async function POST(req: NextRequest) {
       startedAtSeconds
     ]);
     
+    const sessionId = result.rows[0].id;
+    
+    // Save conversation messages if provided
+    if (messages && Array.isArray(messages) && messages.length > 0) {
+      for (const message of messages) {
+        await query(`
+          INSERT INTO conversation_messages (session_id, text, sender, timestamp)
+          VALUES ($1, $2, $3, $4)
+        `, [
+          sessionId,
+          message.text || '',
+          message.sender || 'user',
+          message.timestamp || Date.now()
+        ]);
+      }
+    }
+    
     // Update user's token and session count
     await query(`
       UPDATE users 
@@ -46,7 +63,7 @@ export async function POST(req: NextRequest) {
     
     return NextResponse.json({ 
       success: true, 
-      sessionId: result.rows[0].id 
+      sessionId: sessionId 
     });
   } catch (error: any) {
     if (error.message === 'Unauthorized') {

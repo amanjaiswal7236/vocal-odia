@@ -119,7 +119,7 @@ export default function SessionPage() {
     }
   }, [params.id, scenarios, courses, router, searchParams]);
 
-  const handleEnd = async (estimatedTokens?: number) => {
+  const handleEnd = async (estimatedTokens?: number, transcriptions?: any[]) => {
     const durationSeconds = Math.floor((Date.now() - sessionStartTime) / 1000);
     
     // Record session in database
@@ -131,7 +131,8 @@ export default function SessionPage() {
         courseId: activeCourseId || null,
         tokensUsed: estimatedTokens || 0,
         durationSeconds,
-        startedAt: sessionStartTime
+        startedAt: sessionStartTime,
+        messages: transcriptions || []
       });
     }
     

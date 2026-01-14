@@ -285,6 +285,7 @@ export const contentService = {
     tokensUsed: number;
     durationSeconds: number;
     startedAt: number;
+    messages?: Array<{ text: string; sender: 'user' | 'ai'; timestamp: number }>;
   }) {
     try {
       const response = await fetchWithAuth(`${API_URL}/content/sessions`, {
@@ -299,6 +300,18 @@ export const contentService = {
       // Silently fail session recording to not interrupt user experience
       console.error('Failed to record session:', error);
       return { success: false };
+    }
+  },
+
+  async getSessionMessages(sessionId: number) {
+    try {
+      const response = await retryRequest(
+        () => fetchWithAuth(`${API_URL}/content/sessions/${sessionId}/messages`),
+        2
+      );
+      return response.json();
+    } catch (error) {
+      throw new AppError('Failed to load session messages. Please try again.', 'FETCH_SESSION_MESSAGES_ERROR');
     }
   }
 };

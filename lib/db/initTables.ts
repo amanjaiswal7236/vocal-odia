@@ -153,6 +153,19 @@ export const initContentTables = async () => {
     `);
     console.log('✓ User sessions table created/verified');
 
+    // Conversation messages table to store session conversations
+    await query(`
+      CREATE TABLE IF NOT EXISTS conversation_messages (
+        id SERIAL PRIMARY KEY,
+        session_id INTEGER NOT NULL REFERENCES user_sessions(id) ON DELETE CASCADE,
+        text TEXT NOT NULL,
+        sender VARCHAR(10) NOT NULL CHECK (sender IN ('user', 'ai')),
+        timestamp BIGINT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✓ Conversation messages table created/verified');
+
     console.log('Content tables initialized');
   } catch (error) {
     console.error('Error initializing content tables:', error);
