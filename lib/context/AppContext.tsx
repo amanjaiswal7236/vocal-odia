@@ -54,7 +54,9 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     tokensUsed: 0,
     sessionsCount: 0,
     lastActive: Date.now(),
-    errorCount: 0
+    errorCount: 0,
+    dailyTokens: [],
+    userTokens: []
   });
   const [usersUsage, setUsersUsage] = useState<UserUsage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +71,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         contentService.getNuggets(),
         userId ? contentService.getCourses(userId) : contentService.getCourses(),
         userId ? contentService.getQuests(userId) : Promise.resolve([]),
-        userId ? contentService.getStats(userId) : Promise.resolve(null)
+        // Don't load user stats for admin - they use admin stats instead
+        (userId && currentUser?.role !== 'admin') ? contentService.getStats(userId) : Promise.resolve(null)
       ]);
 
       if (scenariosData.status === 'fulfilled') {
@@ -126,7 +129,21 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
       }
 
       if (statsData.status === 'fulfilled' && statsData.value) {
-        setUsageStats(statsData.value);
+        // For admin users, preserve admin stats (dailyTokens, userTokens)
+        // For regular users, set the user stats
+        setUsageStats(prev => {
+          // If we already have admin stats (dailyTokens/userTokens), preserve them
+          const hasAdminData = Array.isArray(prev.dailyTokens) && prev.dailyTokens.length > 0 || 
+                               Array.isArray(prev.userTokens) && prev.userTokens.length > 0;
+          if (hasAdminData) {
+            return {
+              ...statsData.value,
+              dailyTokens: prev.dailyTokens || [],
+              userTokens: prev.userTokens || []
+            };
+          }
+          return statsData.value;
+        });
       }
     } catch (error) {
       const errorMessage = getErrorMessage(error);
@@ -157,12 +174,20 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
           contentService.getAllUsers()
         ]).then(([statsResult, usersResult]) => {
           if (statsResult.status === 'fulfilled') {
-            setUsageStats(statsResult.value);
+            const stats = statsResult.value;
+            // Ensure arrays are always present
+            setUsageStats({
+              ...stats,
+              dailyTokens: stats.dailyTokens || [],
+              userTokens: stats.userTokens || []
+            });
           }
           if (usersResult.status === 'fulfilled') {
             setUsersUsage(usersResult.value);
           }
         });
+        // Load content for admin (scenarios, courses, etc.) but don't load user stats
+        loadContent(parseInt(user.id));
       } else {
         setUsersUsage([{
           id: user.id,
@@ -174,9 +199,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
           streak: user.streak,
           mistakesFixed: user.mistakesFixed || []
         }]);
+        loadContent(parseInt(user.id));
       }
-      
-      loadContent(parseInt(user.id));
     } else {
       setLoading(false);
     }

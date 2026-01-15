@@ -330,7 +330,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
             {/* Token Usage Over Time Chart */}
-            {stats.dailyTokens && stats.dailyTokens.length > 0 ? (
+            {Array.isArray(stats.dailyTokens) && stats.dailyTokens.length > 0 ? (
               <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                 <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
                   <i className="fas fa-chart-line text-green-600"></i>
@@ -384,7 +384,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             )}
 
             {/* Top Users by Token Usage */}
-            {stats.userTokens && stats.userTokens.length > 0 ? (
+            {Array.isArray(stats.userTokens) && stats.userTokens.length > 0 ? (
               <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                 <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
                   <i className="fas fa-users text-green-600"></i>
@@ -440,7 +440,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             )}
 
             {/* Sessions Over Time (if we have daily data) */}
-            {stats.dailyTokens && stats.dailyTokens.length > 0 && (
+            {Array.isArray(stats.dailyTokens) && stats.dailyTokens.length > 0 && (
               <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                 <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
                   <i className="fas fa-calendar-alt text-green-600"></i>

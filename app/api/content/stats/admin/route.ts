@@ -34,8 +34,8 @@ export async function GET(req: NextRequest) {
     // Get token usage over last 7 days for graph
     const dailyTokensResult = await query(`
       SELECT 
-        DATE(started_at) as date,
-        SUM(tokens_used) as tokens
+        DATE(started_at)::text as date,
+        COALESCE(SUM(tokens_used), 0) as tokens
       FROM user_sessions
       WHERE started_at >= NOW() - INTERVAL '7 days'
       GROUP BY DATE(started_at)
@@ -48,13 +48,14 @@ export async function GET(req: NextRequest) {
         u.id,
         u.name,
         u.avatar,
-        SUM(us.tokens_used) as total_tokens,
+        COALESCE(SUM(us.tokens_used), 0) as total_tokens,
         COUNT(us.id) as session_count
       FROM users u
       LEFT JOIN user_sessions us ON u.id = us.user_id
       WHERE u.role = 'user'
       GROUP BY u.id, u.name, u.avatar
-      ORDER BY total_tokens DESC NULLS LAST
+      HAVING COALESCE(SUM(us.tokens_used), 0) > 0
+      ORDER BY total_tokens DESC
       LIMIT 10
     `);
     
