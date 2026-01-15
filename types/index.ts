@@ -87,6 +87,8 @@ export interface DailyNugget {
 
 export interface UsageStats {
   tokensUsed: number;
+  dailyTokens?: Array<{ date: string; tokens: number }>;
+  userTokens?: Array<{ userId: string; name: string; avatar: string; tokens: number; sessions: number }>;
   sessionsCount: number;
   lastActive: number;
   errorCount: number;

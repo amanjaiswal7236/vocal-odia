@@ -90,20 +90,20 @@ const SessionsList: React.FC<SessionsListProps> = ({ userId, onBack, onSelectSes
             <button
               key={session.id}
               onClick={() => onSelectSession(session)}
-              className="w-full bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md hover:border-indigo-200 text-left transition-all group"
+              className="w-full bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md hover:border-green-200 text-left transition-all group"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                    <div className="w-10 h-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-colors">
                       <i className={`fas ${session.isCourseLesson ? 'fa-book' : 'fa-comments'} text-sm`}></i>
                     </div>
                     <div>
-                      <h3 className="font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">
+                      <h3 className="font-bold text-gray-900 group-hover:text-green-600 transition-colors">
                         {session.scenarioTitle}
                       </h3>
                       {session.isCourseLesson && (
-                        <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-xs font-medium">
+                        <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-green-50 text-green-600 text-xs font-medium">
                           Course Lesson
                         </span>
                       )}
@@ -128,7 +128,7 @@ const SessionsList: React.FC<SessionsListProps> = ({ userId, onBack, onSelectSes
                     )}
                   </div>
                 </div>
-                <i className="fas fa-chevron-right text-gray-400 group-hover:text-indigo-600 transition-colors"></i>
+                <i className="fas fa-chevron-right text-gray-400 group-hover:text-green-600 transition-colors"></i>
               </div>
             </button>
           ))}

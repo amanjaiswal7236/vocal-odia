@@ -52,7 +52,7 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess, onCancel }) => {
                   setPasscode(e.target.value);
                   setError(false);
                 }}
-                className={`w-full px-5 py-4 bg-gray-50 border ${error ? 'border-red-500 ring-2 ring-red-100' : 'border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'} rounded-2xl outline-none transition-all text-center text-xl tracking-[0.5em] font-mono`}
+                className={`w-full px-5 py-4 bg-gray-50 border ${error ? 'border-red-500 ring-2 ring-red-100' : 'border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-100'} rounded-2xl outline-none transition-all text-center text-xl tracking-[0.5em] font-mono`}
                 placeholder="••••••••"
               />
               {error && (

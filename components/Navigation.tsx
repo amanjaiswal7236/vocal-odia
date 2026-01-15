@@ -49,11 +49,11 @@ export default function Navigation() {
             className="flex items-center gap-2 cursor-pointer" 
             onClick={() => router.push('/dashboard')}
           >
-            <div className="bg-indigo-600 p-1.5 rounded-lg">
+            <div className="bg-slate-800 p-1.5 rounded-lg">
               <i className="fas fa-graduation-cap text-white"></i>
             </div>
             <span className="font-extrabold text-xl tracking-tight">
-              Vocal<span className="text-indigo-600">Odia</span>
+              Vocal<span className="text-green-600">Odia</span>
             </span>
           </div>
           <div className="flex items-center gap-6">
@@ -77,7 +77,7 @@ export default function Navigation() {
             </button>
             <div
               className={`w-9 h-9 rounded-full border-2 shadow-sm overflow-hidden cursor-pointer transition-all ${
-                pathname === '/profile' ? 'border-indigo-600 scale-110' : 'border-white'
+                pathname === '/profile' ? 'border-green-600 scale-110' : 'border-white'
               }`}
               onClick={() => router.push('/profile')}
             >

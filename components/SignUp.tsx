@@ -37,14 +37,14 @@ const SignUp: React.FC<SignUpProps> = ({ onSuccess, onSwitchToSignIn }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-indigo-50 to-blue-100">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 to-slate-100">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-300">
-        <div className="bg-gradient-to-br from-indigo-600 to-blue-700 p-8 text-white text-center">
+        <div className="bg-gradient-to-br from-slate-800 via-slate-900 to-slate-800 p-8 text-white text-center">
           <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <i className="fas fa-graduation-cap text-3xl"></i>
           </div>
           <h2 className="text-2xl font-black mb-2">Join VocalOdia</h2>
-          <p className="text-indigo-100 text-sm">Start your English learning journey</p>
+          <p className="text-slate-200 text-sm">Start your English learning journey</p>
         </div>
 
         <div className="p-8">
@@ -58,7 +58,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSuccess, onSwitchToSignIn }) => {
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all"
+                className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 transition-all"
                 placeholder="Enter your name"
               />
             </div>
@@ -72,7 +72,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSuccess, onSwitchToSignIn }) => {
                 required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all"
+                className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 transition-all"
                 placeholder="your@email.com"
               />
             </div>
@@ -87,7 +87,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSuccess, onSwitchToSignIn }) => {
                 minLength={6}
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all"
+                className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 transition-all"
                 placeholder="••••••••"
               />
             </div>
@@ -101,7 +101,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSuccess, onSwitchToSignIn }) => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl active:scale-95"
+              className="w-full bg-green-600 text-white font-black py-4 rounded-2xl hover:bg-green-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl active:scale-95"
             >
               {loading ? (
                 <i className="fas fa-circle-notch animate-spin"></i>
@@ -116,7 +116,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSuccess, onSwitchToSignIn }) => {
               Already have an account?{' '}
               <button
                 onClick={onSwitchToSignIn}
-                className="text-indigo-600 font-bold hover:underline"
+                className="text-green-600 font-bold hover:underline"
               >
                 Sign In
               </button>

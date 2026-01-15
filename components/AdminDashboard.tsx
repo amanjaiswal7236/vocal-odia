@@ -286,19 +286,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   return (
     <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden min-h-[600px] animate-in fade-in zoom-in duration-300">
       <div className="flex border-b bg-gray-50/30 overflow-x-auto no-scrollbar">
-        <button onClick={() => setActiveTab('overview')} className={`px-6 py-4 font-bold text-sm whitespace-nowrap transition-colors ${activeTab === 'overview' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white' : 'text-gray-500 hover:text-gray-700'}`}>
+        <button onClick={() => setActiveTab('overview')} className={`px-6 py-4 font-bold text-sm whitespace-nowrap transition-colors ${activeTab === 'overview' ? 'text-green-600 border-b-2 border-green-600 bg-white' : 'text-gray-500 hover:text-gray-700'}`}>
           <i className="fas fa-chart-pie mr-2"></i> Overview
         </button>
-        <button onClick={() => setActiveTab('users')} className={`px-6 py-4 font-bold text-sm whitespace-nowrap transition-colors ${activeTab === 'users' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white' : 'text-gray-500 hover:text-gray-700'}`}>
+        <button onClick={() => setActiveTab('users')} className={`px-6 py-4 font-bold text-sm whitespace-nowrap transition-colors ${activeTab === 'users' ? 'text-green-600 border-b-2 border-green-600 bg-white' : 'text-gray-500 hover:text-gray-700'}`}>
           <i className="fas fa-users mr-2"></i> Users
         </button>
-        <button onClick={() => { setActiveTab('courses'); setIsAddingCourse(false); setEditingCourse(null); }} className={`px-6 py-4 font-bold text-sm whitespace-nowrap transition-colors ${activeTab === 'courses' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white' : 'text-gray-500 hover:text-gray-700'}`}>
+        <button onClick={() => { setActiveTab('courses'); setIsAddingCourse(false); setEditingCourse(null); }} className={`px-6 py-4 font-bold text-sm whitespace-nowrap transition-colors ${activeTab === 'courses' ? 'text-green-600 border-b-2 border-green-600 bg-white' : 'text-gray-500 hover:text-gray-700'}`}>
           <i className="fas fa-graduation-cap mr-2"></i> Courses
         </button>
-        <button onClick={() => { setActiveTab('scenarios'); setIsAddingScenario(false); setEditingScenario(null); }} className={`px-6 py-4 font-bold text-sm whitespace-nowrap transition-colors ${activeTab === 'scenarios' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white' : 'text-gray-500 hover:text-gray-700'}`}>
+        <button onClick={() => { setActiveTab('scenarios'); setIsAddingScenario(false); setEditingScenario(null); }} className={`px-6 py-4 font-bold text-sm whitespace-nowrap transition-colors ${activeTab === 'scenarios' ? 'text-green-600 border-b-2 border-green-600 bg-white' : 'text-gray-500 hover:text-gray-700'}`}>
           <i className="fas fa-list mr-2"></i> Scenarios
         </button>
-        <button onClick={() => setActiveTab('nuggets')} className={`px-6 py-4 font-bold text-sm whitespace-nowrap transition-colors ${activeTab === 'nuggets' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white' : 'text-gray-500 hover:text-gray-700'}`}>
+        <button onClick={() => setActiveTab('nuggets')} className={`px-6 py-4 font-bold text-sm whitespace-nowrap transition-colors ${activeTab === 'nuggets' ? 'text-green-600 border-b-2 border-green-600 bg-white' : 'text-gray-500 hover:text-gray-700'}`}>
           <i className="fas fa-brain mr-2"></i> Nuggets
         </button>
         <div className="flex-1"></div>
@@ -312,12 +312,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="space-y-8 animate-in fade-in duration-300">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100">
-                <p className="text-blue-600 text-xs font-bold uppercase tracking-wider mb-1">Estimated Tokens</p>
+                <p className="text-blue-600 text-xs font-bold uppercase tracking-wider mb-1">Total Tokens Used</p>
                 <p className="text-3xl font-black text-blue-900">{stats.tokensUsed.toLocaleString()}</p>
+                <p className="text-xs text-blue-600 mt-1">From all sessions</p>
               </div>
-              <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100">
-                <p className="text-indigo-600 text-xs font-bold uppercase tracking-wider mb-1">Total Sessions</p>
-                <p className="text-3xl font-black text-indigo-900">{stats.sessionsCount}</p>
+              <div className="bg-green-50 p-6 rounded-2xl border border-green-100">
+                <p className="text-green-600 text-xs font-bold uppercase tracking-wider mb-1">Total Sessions</p>
+                <p className="text-3xl font-black text-green-900">{stats.sessionsCount}</p>
               </div>
               <div className="bg-green-50 p-6 rounded-2xl border border-green-100">
                 <p className="text-green-600 text-xs font-bold uppercase tracking-wider mb-1">Unique Users</p>
@@ -328,15 +329,138 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <p className="text-3xl font-black text-orange-900">1</p>
               </div>
             </div>
-            {/* Visualizer Mock */}
-            <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100">
-              <h3 className="font-bold mb-4">Real-time Usage Velocity</h3>
-              <div className="flex items-end gap-1 h-32">
-                {[40, 60, 30, 80, 50, 90, 100, 70, 85, 45, 65, 55].map((val, i) => (
-                  <div key={i} className="flex-1 bg-indigo-200 rounded-t-sm" style={{ height: `${val}%` }}></div>
-                ))}
+            {/* Token Usage Over Time Chart */}
+            {stats.dailyTokens && stats.dailyTokens.length > 0 ? (
+              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                  <i className="fas fa-chart-line text-green-600"></i>
+                  Token Usage (Last 7 Days)
+                </h3>
+                <div className="flex items-end gap-2 h-48 pb-8">
+                  {stats.dailyTokens.map((day, i) => {
+                    const maxTokens = Math.max(...stats.dailyTokens!.map(d => d.tokens), 1);
+                    const heightPercent = maxTokens > 0 ? (day.tokens / maxTokens) * 100 : 0;
+                    // Ensure minimum visible height of 20px or 10% whichever is larger
+                    const minHeight = Math.max(20, (192 * 0.1)); // 10% of 192px (h-48 = 192px)
+                    const height = Math.max(heightPercent, (minHeight / 192) * 100);
+                    const date = new Date(day.date);
+                    const dayLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    return (
+                      <div key={i} className="flex-1 flex flex-col items-center group relative h-full">
+                        <div className="flex-1 flex items-end w-full">
+                          <div 
+                            className="w-full bg-gradient-to-t from-green-600 to-green-400 rounded-t-lg transition-all hover:from-green-700 hover:to-green-500 cursor-pointer min-h-[20px]"
+                            style={{ height: `${height}%` }}
+                            title={`${dayLabel}: ${day.tokens.toLocaleString()} tokens`}
+                          >
+                          </div>
+                        </div>
+                        <div className="mt-2 text-xs font-medium text-gray-500 text-center whitespace-nowrap">
+                          {dayLabel}
+                        </div>
+                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10 pointer-events-none">
+                          {day.tokens.toLocaleString()} tokens
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
+                  <span>Total: {stats.dailyTokens.reduce((sum, d) => sum + d.tokens, 0).toLocaleString()} tokens</span>
+                  <span>Avg: {Math.round(stats.dailyTokens.reduce((sum, d) => sum + d.tokens, 0) / stats.dailyTokens.length).toLocaleString()} tokens/day</span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                  <i className="fas fa-chart-line text-green-600"></i>
+                  Token Usage (Last 7 Days)
+                </h3>
+                <div className="text-center py-12 text-gray-400">
+                  <i className="fas fa-chart-bar text-4xl mb-4"></i>
+                  <p className="text-sm">No token usage data available for the last 7 days</p>
+                </div>
+              </div>
+            )}
+
+            {/* Top Users by Token Usage */}
+            {stats.userTokens && stats.userTokens.length > 0 ? (
+              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                  <i className="fas fa-users text-green-600"></i>
+                  Top Users by Token Usage
+                </h3>
+                <div className="space-y-3">
+                  {stats.userTokens.map((user, i) => {
+                    const maxTokens = Math.max(...stats.userTokens!.map(u => u.tokens), 1);
+                    const width = maxTokens > 0 ? (user.tokens / maxTokens) * 100 : 0;
+                    return (
+                      <div key={user.userId} className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 min-w-[120px]">
+                          <span className="text-xs font-black text-gray-400 w-4">#{i + 1}</span>
+                          <img src={user.avatar} alt={user.name} className="w-8 h-8 rounded-full" />
+                          <span className="text-sm font-bold text-gray-900 truncate max-w-[100px]">{user.name}</span>
+                        </div>
+                        <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden relative">
+                          <div 
+                            className="h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-end pr-2 transition-all"
+                            style={{ width: `${width}%` }}
+                          >
+                            {width > 15 && (
+                              <span className="text-xs font-bold text-white">
+                                {user.tokens.toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                          {width <= 15 && (
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-700">
+                              {user.tokens.toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs font-medium text-gray-500 min-w-[60px] text-right">
+                          {user.sessions} sessions
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                  <i className="fas fa-users text-green-600"></i>
+                  Top Users by Token Usage
+                </h3>
+                <div className="text-center py-12 text-gray-400">
+                  <i className="fas fa-user-slash text-4xl mb-4"></i>
+                  <p className="text-sm">No user token data available</p>
+                </div>
+              </div>
+            )}
+
+            {/* Sessions Over Time (if we have daily data) */}
+            {stats.dailyTokens && stats.dailyTokens.length > 0 && (
+              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                  <i className="fas fa-calendar-alt text-green-600"></i>
+                  Daily Activity Summary
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {stats.dailyTokens.slice(-4).map((day, i) => {
+                    const date = new Date(day.date);
+                    const dayLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    return (
+                      <div key={i} className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-xl border border-green-200">
+                        <p className="text-xs font-bold text-green-600 uppercase mb-1">{dayLabel}</p>
+                        <p className="text-2xl font-black text-green-900">{day.tokens.toLocaleString()}</p>
+                        <p className="text-xs text-green-600 mt-1">tokens used</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -350,7 +474,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     setEditingCourse(null);
                     setNewCourse({ title: '', description: '', level: CourseLevel.BEGINNER, modules: [] });
                     setIsAddingCourse(true);
-                  }} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md hover:bg-indigo-700 transition-all active:scale-95">
+                  }} className="bg-green-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md hover:bg-green-700 transition-all active:scale-95">
                     + Create New Course
                   </button>
                 </div>
@@ -358,7 +482,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {courses.map(c => (
                     <div key={c.id} className="p-6 bg-white border border-gray-100 rounded-2xl shadow-sm relative group">
                       <div className="flex justify-between mb-4">
-                        <span className="text-[10px] font-black uppercase tracking-widest bg-indigo-50 text-indigo-600 px-2 py-1 rounded">{c.level}</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest bg-green-50 text-green-600 px-2 py-1 rounded">{c.level}</span>
                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button 
                             onClick={() => handleEditCourse(c)} 
@@ -378,7 +502,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                       <h4 className="font-bold text-gray-900">{c.title}</h4>
                       <p className="text-xs text-gray-500 mt-2 line-clamp-2">{c.description}</p>
-                      <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-indigo-400 uppercase">
+                      <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-green-600 uppercase">
                         <i className="fas fa-layer-group"></i> {c.modules.length} Modules
                       </div>
                     </div>
@@ -415,13 +539,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <textarea value={newCourse.description} onChange={e => setNewCourse({...newCourse, description: e.target.value})} rows={2} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none resize-none" placeholder="Briefly describe what students will learn..." />
                   </div>
 
-                  <div className="bg-indigo-600/5 p-6 rounded-2xl border border-indigo-100">
+                  <div className="bg-green-50 p-6 rounded-2xl border border-green-100">
                     <div className="flex justify-between items-center mb-4">
-                      <h4 className="font-bold text-indigo-900">Curriculum Structure</h4>
+                      <h4 className="font-bold text-green-900">Curriculum Structure</h4>
                       <button 
                         onClick={handleGenerateCurriculum}
                         disabled={isGeneratingCurriculum}
-                        className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-black shadow-md hover:bg-indigo-700 transition-all flex items-center gap-2 disabled:opacity-50"
+                        className="bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-black shadow-md hover:bg-green-700 transition-all flex items-center gap-2 disabled:opacity-50"
                       >
                         {isGeneratingCurriculum ? <><i className="fas fa-circle-notch animate-spin"></i> Generating...</> : <><i className="fas fa-wand-magic-sparkles"></i> AI Assist Build</>}
                       </button>
@@ -430,7 +554,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div className="space-y-4 max-h-60 overflow-y-auto pr-2 no-scrollbar">
                         {newCourse.modules.map((m, idx) => (
                           <div key={idx} className="bg-white p-4 rounded-xl border border-gray-100">
-                            <p className="font-black text-xs text-indigo-400 mb-1 uppercase">Module {idx+1}</p>
+                            <p className="font-black text-xs text-green-600 mb-1 uppercase">Module {idx+1}</p>
                             <p className="font-bold text-sm text-gray-900">{m.title}</p>
                             <p className="text-[10px] text-gray-500 mt-1">{m.lessons.length} Lessons Generated</p>
                           </div>
@@ -576,19 +700,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="space-y-6 animate-in fade-in duration-300">
             {!isAddingScenario ? (
               <>
-                <div className="flex justify-between items-center">
-                  <h3 className="font-bold text-lg">Active Scenarios</h3>
-                  <button onClick={() => {
-                    setEditingScenario(null);
-                    setNewScenario({ title: '', description: '', icon: 'fa-comments', prompt: '', image: '' });
-                    setIsAddingScenario(true);
-                  }} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md hover:bg-indigo-700 transition-all flex items-center gap-2 active:scale-95">
-                    <i className="fas fa-plus"></i> Add New Scenario
-                  </button>
+                <div className="bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800 rounded-2xl p-6 text-white mb-6">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="font-bold text-xl mb-1">Active Scenarios</h3>
+                      <p className="text-slate-200 text-sm">Manage conversation practice scenarios</p>
+                    </div>
+                    <button onClick={() => {
+                      setEditingScenario(null);
+                      setNewScenario({ title: '', description: '', icon: 'fa-comments', prompt: '', image: '' });
+                      setIsAddingScenario(true);
+                    }} className="bg-green-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md hover:bg-green-600 transition-all flex items-center gap-2 active:scale-95">
+                      <i className="fas fa-plus"></i> Add New Scenario
+                    </button>
+                  </div>
                 </div>
                 <div className="border border-gray-100 rounded-2xl overflow-hidden shadow-sm bg-white">
                   <table className="w-full text-left">
-                    <thead className="bg-gray-50 border-b text-xs font-bold text-gray-500 uppercase">
+                    <thead className="bg-slate-800 text-white text-xs font-bold uppercase">
                       <tr>
                         <th className="px-6 py-4">Title</th>
                         <th className="px-6 py-4">Icon</th>
@@ -600,12 +729,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {scenarios.map(s => (
                         <tr key={s.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-6 py-4 font-bold text-gray-900">{s.title}</td>
-                          <td className="px-6 py-4"><i className={`fas ${s.icon} text-indigo-600`}></i></td>
+                          <td className="px-6 py-4"><i className={`fas ${s.icon} text-green-600`}></i></td>
                           <td className="px-6 py-4 text-gray-500 max-w-xs truncate">{s.description}</td>
                           <td className="px-6 py-4 text-right">
                             <button 
                               onClick={() => handleEditScenario(s)}
-                              className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg mr-2"
+                              className="text-green-600 hover:bg-green-50 p-2 rounded-lg mr-2"
                               title="Edit scenario"
                             >
                               <i className="fas fa-edit"></i>
@@ -625,40 +754,42 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </>
             ) : (
-              <div className="max-w-2xl mx-auto bg-gray-50 rounded-3xl p-8 border border-gray-100 shadow-inner">
-                <div className="flex items-center gap-3 mb-6">
-                  <button onClick={() => {
-                    setIsAddingScenario(false);
-                    setEditingScenario(null);
-                    setNewScenario({ title: '', description: '', icon: 'fa-comments', prompt: '', image: '' });
-                  }} className="text-gray-400 hover:text-gray-600 transition-colors"><i className="fas fa-arrow-left"></i></button>
-                  <h3 className="font-bold text-xl text-gray-900">{editingScenario ? 'Edit Scenario' : 'Configure New Scenario'}</h3>
+              <div className="max-w-2xl mx-auto bg-white rounded-3xl p-8 border border-gray-100 shadow-xl overflow-hidden">
+                <div className="bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800 p-6 -m-8 mb-6 text-white">
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => {
+                      setIsAddingScenario(false);
+                      setEditingScenario(null);
+                      setNewScenario({ title: '', description: '', icon: 'fa-comments', prompt: '', image: '' });
+                    }} className="text-slate-200 hover:text-white transition-colors"><i className="fas fa-arrow-left"></i></button>
+                    <h3 className="font-bold text-xl">{editingScenario ? 'Edit Scenario' : 'Configure New Scenario'}</h3>
+                  </div>
                 </div>
                 <form onSubmit={handleAddScenario} className="space-y-6">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-black text-gray-400 uppercase mb-2">Title</label>
-                      <input type="text" required value={newScenario.title} onChange={e => setNewScenario({...newScenario, title: e.target.value})} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-indigo-500 transition-all font-medium" />
+                      <input type="text" required value={newScenario.title} onChange={e => setNewScenario({...newScenario, title: e.target.value})} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 transition-all font-medium" />
                     </div>
                     <div>
                       <label className="block text-xs font-black text-gray-400 uppercase mb-2">Icon (FA Class)</label>
-                      <input type="text" required value={newScenario.icon} onChange={e => setNewScenario({...newScenario, icon: e.target.value})} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-indigo-500 transition-all font-medium" />
+                      <input type="text" required value={newScenario.icon} onChange={e => setNewScenario({...newScenario, icon: e.target.value})} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 transition-all font-medium" />
                     </div>
                   </div>
                   <div>
                     <label className="block text-xs font-black text-gray-400 uppercase mb-2">Description</label>
-                    <input type="text" required value={newScenario.description} onChange={e => setNewScenario({...newScenario, description: e.target.value})} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-indigo-500 transition-all font-medium" />
+                    <input type="text" required value={newScenario.description} onChange={e => setNewScenario({...newScenario, description: e.target.value})} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 transition-all font-medium" />
                   </div>
                   <div>
                     <label className="block text-xs font-black text-gray-400 uppercase mb-2">AI Instruction Prompt</label>
-                    <textarea required value={newScenario.prompt} onChange={e => setNewScenario({...newScenario, prompt: e.target.value})} rows={4} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-indigo-500 transition-all font-medium resize-none" />
+                    <textarea required value={newScenario.prompt} onChange={e => setNewScenario({...newScenario, prompt: e.target.value})} rows={4} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 transition-all font-medium resize-none" />
                   </div>
                   <div>
                     <label className="block text-xs font-black text-gray-400 uppercase mb-2">Image URL (Optional)</label>
-                    <input type="url" value={newScenario.image} onChange={e => setNewScenario({...newScenario, image: e.target.value})} placeholder="https://example.com/image.jpg" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-indigo-500 transition-all font-medium" />
+                    <input type="url" value={newScenario.image} onChange={e => setNewScenario({...newScenario, image: e.target.value})} placeholder="https://example.com/image.jpg" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 transition-all font-medium" />
                     <p className="text-xs text-gray-400 mt-1">Provide an image URL that represents this scenario</p>
                   </div>
-                  <button type="submit" className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-indigo-700 transition-all active:scale-95">
+                  <button type="submit" className="w-full bg-green-600 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-green-700 transition-all active:scale-95">
                     {editingScenario ? 'Update Scenario' : 'Save Scenario'}
                   </button>
                 </form>
@@ -668,18 +799,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
 
         {activeTab === 'nuggets' && (
-          <div className="space-y-4 animate-in fade-in duration-300">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg">Daily Nuggets</h3>
-              <button className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-indigo-700 transition-all">+ Add Word</button>
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <div className="bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800 rounded-2xl p-6 text-white">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="font-bold text-xl mb-1">Daily Nuggets</h3>
+                  <p className="text-slate-200 text-sm">Manage daily vocabulary words for learners</p>
+                </div>
+                <button className="bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-green-600 transition-all flex items-center gap-2">
+                  <i className="fas fa-plus"></i> Add Word
+                </button>
+              </div>
             </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {nuggets.map((n, i) => (
-                <div key={i} className="p-5 bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-md transition-all group relative">
+                <div key={i} className="p-5 bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-md hover:border-green-200 transition-all group relative">
                   <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => removeNugget((n as any).id || 0)} className="text-gray-300 hover:text-red-500"><i className="fas fa-times-circle"></i></button>
                   </div>
-                  <p className="text-lg font-black text-indigo-600 mb-1">{n.word}</p>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center">
+                      <i className="fas fa-book text-lg"></i>
+                    </div>
+                    <p className="text-lg font-black text-green-600">{n.word}</p>
+                  </div>
                   <p className="text-xs text-gray-400 font-medium mb-3 italic">"{n.example}"</p>
                   <p className="text-sm text-gray-600 leading-relaxed">{n.definition}</p>
                 </div>

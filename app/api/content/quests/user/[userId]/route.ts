@@ -30,7 +30,7 @@ export async function GET(
     if (result.rows.length === 0) {
       const defaultQuests = [
         { label: 'Complete 2 Live Sessions', target: 2, type: 'session' },
-        { label: 'Practice 3 Shadowing Sentences', target: 3, type: 'shadow' },
+        { label: 'Practice 3 Pronunciation Sentences', target: 3, type: 'shadow' },
         { label: 'Refine 500+ Tokens', target: 500, type: 'word' }
       ];
       

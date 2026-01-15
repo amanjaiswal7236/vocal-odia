@@ -74,13 +74,13 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
       <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100 space-y-6">
         {/* Header */}
         <div className="flex items-start gap-4 pb-6 border-b border-gray-100">
-          <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+          <div className="w-16 h-16 rounded-2xl bg-green-50 text-green-600 flex items-center justify-center">
             <i className={`fas ${session.isCourseLesson ? 'fa-book' : 'fa-comments'} text-2xl`}></i>
           </div>
           <div className="flex-1">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">{session.scenarioTitle}</h2>
             {session.isCourseLesson && (
-              <span className="inline-block px-3 py-1 rounded-full bg-blue-50 text-blue-600 text-sm font-medium">
+              <span className="inline-block px-3 py-1 rounded-full bg-green-50 text-green-600 text-sm font-medium">
                 Course Lesson
               </span>
             )}
@@ -91,7 +91,7 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
         <div className="grid md:grid-cols-2 gap-6">
           <div className="bg-gray-50 rounded-xl p-5 border border-gray-100">
             <div className="flex items-center gap-3 mb-2">
-              <i className="fas fa-calendar text-indigo-600"></i>
+              <i className="fas fa-calendar text-green-600"></i>
               <h3 className="font-bold text-gray-900 text-sm uppercase tracking-wider">Started</h3>
             </div>
             <p className="text-gray-700 font-medium">{formatDate(session.startedAt)}</p>
@@ -100,7 +100,7 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
           {session.endedAt && (
             <div className="bg-gray-50 rounded-xl p-5 border border-gray-100">
               <div className="flex items-center gap-3 mb-2">
-                <i className="fas fa-calendar-check text-indigo-600"></i>
+                <i className="fas fa-calendar-check text-green-600"></i>
                 <h3 className="font-bold text-gray-900 text-sm uppercase tracking-wider">Ended</h3>
               </div>
               <p className="text-gray-700 font-medium">{formatDate(session.endedAt)}</p>
@@ -110,7 +110,7 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
           {session.durationSeconds > 0 && (
             <div className="bg-gray-50 rounded-xl p-5 border border-gray-100">
               <div className="flex items-center gap-3 mb-2">
-                <i className="fas fa-clock text-indigo-600"></i>
+                <i className="fas fa-clock text-green-600"></i>
                 <h3 className="font-bold text-gray-900 text-sm uppercase tracking-wider">Duration</h3>
               </div>
               <p className="text-gray-700 font-medium">{formatDuration(session.durationSeconds)}</p>
@@ -120,7 +120,7 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
           {session.tokensUsed > 0 && (
             <div className="bg-gray-50 rounded-xl p-5 border border-gray-100">
               <div className="flex items-center gap-3 mb-2">
-                <i className="fas fa-coins text-indigo-600"></i>
+                <i className="fas fa-coins text-green-600"></i>
                 <h3 className="font-bold text-gray-900 text-sm uppercase tracking-wider">Tokens Used</h3>
               </div>
               <p className="text-gray-700 font-medium">{session.tokensUsed.toLocaleString()}</p>
@@ -164,7 +164,7 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
       {/* Conversation Section */}
       <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100">
         <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-          <i className="fas fa-comments text-indigo-600"></i>
+          <i className="fas fa-comments text-green-600"></i>
           Conversation
         </h2>
         
@@ -185,28 +185,28 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
                 className={`flex gap-4 ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {message.sender === 'ai' && (
-                  <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center flex-shrink-0">
                     <i className="fas fa-robot text-sm"></i>
                   </div>
                 )}
                 <div
                   className={`max-w-[75%] rounded-2xl px-4 py-3 ${
                     message.sender === 'user'
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-green-600 text-white'
                       : 'bg-gray-100 text-gray-900'
                   }`}
                 >
                   <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.text}</p>
                   <p
                     className={`text-xs mt-2 ${
-                      message.sender === 'user' ? 'text-indigo-200' : 'text-gray-500'
+                      message.sender === 'user' ? 'text-green-200' : 'text-gray-500'
                     }`}
                   >
                     {formatMessageTime(message.timestamp)}
                   </p>
                 </div>
                 {message.sender === 'user' && (
-                  <div className="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center flex-shrink-0">
                     <i className="fas fa-user text-sm"></i>
                   </div>
                 )}
@@ -220,7 +220,7 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
       <div className="flex justify-center">
         <button
           onClick={onBack}
-          className="bg-indigo-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2"
+          className="bg-green-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-green-700 transition-all flex items-center gap-2"
         >
           <i className="fas fa-arrow-left"></i>
           Back to Sessions

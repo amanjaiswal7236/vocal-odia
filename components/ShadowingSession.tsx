@@ -82,7 +82,7 @@ const ShadowingSession: React.FC<ShadowingSessionProps> = ({ tasks: initialTasks
         contents: [{ parts: [{ text: prompt }] }],
         config: {
           responseModalities: [Modality.AUDIO],
-          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'aoede' } } },
         },
       });
 
@@ -138,10 +138,10 @@ const ShadowingSession: React.FC<ShadowingSessionProps> = ({ tasks: initialTasks
           <i className="fas fa-arrow-left text-gray-600"></i>
         </button>
         <div className="flex-1">
-          <h1 className="text-xl font-black text-gray-900">Shadowing Mode</h1>
+          <h1 className="text-xl font-black text-gray-900">Pronunciation Mode</h1>
           <div className="flex gap-1 mt-2">
             {tasks.map((_, i) => (
-              <div key={i} className={`h-1.5 flex-1 rounded-full transition-all ${i === currentIndex ? 'bg-indigo-600' : i < currentIndex ? 'bg-green-500' : 'bg-gray-200'}`} />
+              <div key={i} className={`h-1.5 flex-1 rounded-full transition-all ${i === currentIndex ? 'bg-green-600' : i < currentIndex ? 'bg-green-500' : 'bg-gray-200'}`} />
             ))}
           </div>
         </div>
@@ -149,13 +149,13 @@ const ShadowingSession: React.FC<ShadowingSessionProps> = ({ tasks: initialTasks
 
       {loading ? (
         <div className="bg-white rounded-3xl p-10 shadow-xl border border-gray-100 text-center">
-          <LoadingSpinner text="Loading shadowing tasks..." />
+          <LoadingSpinner text="Loading pronunciation tasks..." />
         </div>
       ) : !currentTask ? (
         <EmptyState
           icon="fa-microphone-slash"
           title="No tasks available"
-          description="Shadowing tasks will appear here when available"
+          description="Pronunciation tasks will appear here when available"
           action={{ label: "Go Back", onClick: onBack }}
         />
       ) : (
@@ -164,7 +164,7 @@ const ShadowingSession: React.FC<ShadowingSessionProps> = ({ tasks: initialTasks
             <i className="fas fa-quote-right text-9xl"></i>
           </div>
 
-          <span className="inline-block px-3 py-1 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-widest mb-6">
+          <span className="inline-block px-3 py-1 rounded-full bg-green-50 text-green-600 text-[10px] font-black uppercase tracking-widest mb-6">
             Focus: {currentTask.focusArea}
           </span>
 
@@ -180,7 +180,7 @@ const ShadowingSession: React.FC<ShadowingSessionProps> = ({ tasks: initialTasks
           <div className="mb-8">
             <button
               onClick={() => setShowWordPractice(!showWordPractice)}
-              className="text-sm font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-2 mx-auto"
+              className="text-sm font-medium text-green-600 hover:text-green-700 flex items-center gap-2 mx-auto"
             >
               <i className={`fas ${showWordPractice ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>
               <span>{showWordPractice ? 'Hide' : 'Practice'} Word Pronunciation</span>
@@ -189,8 +189,8 @@ const ShadowingSession: React.FC<ShadowingSessionProps> = ({ tasks: initialTasks
 
           {/* Word Pronunciation Practice */}
           {showWordPractice && (
-            <div className="mb-8 p-6 bg-indigo-50 rounded-2xl border border-indigo-100">
-              <h3 className="text-sm font-bold text-indigo-900 mb-4 flex items-center gap-2">
+            <div className="mb-8 p-6 bg-green-50 rounded-2xl border border-green-100">
+              <h3 className="text-sm font-bold text-green-900 mb-4 flex items-center gap-2">
                 <i className="fas fa-volume-up"></i>
                 Click on words to hear pronunciation
               </h3>
@@ -202,10 +202,10 @@ const ShadowingSession: React.FC<ShadowingSessionProps> = ({ tasks: initialTasks
                     disabled={isPlayingWord}
                     className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                       selectedWord === word && isPlayingWord
-                        ? 'bg-indigo-600 text-white animate-pulse'
+                        ? 'bg-green-600 text-white animate-pulse'
                         : selectedWord === word
-                        ? 'bg-indigo-200 text-indigo-900'
-                        : 'bg-white text-gray-700 hover:bg-indigo-100 border border-indigo-200'
+                        ? 'bg-green-200 text-green-900'
+                        : 'bg-white text-gray-700 hover:bg-green-100 border border-green-200'
                     }`}
                   >
                     {word}
@@ -223,7 +223,7 @@ const ShadowingSession: React.FC<ShadowingSessionProps> = ({ tasks: initialTasks
             <button 
               onClick={() => playAIModel()}
               disabled={isPlaying || isRecording}
-              className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${isPlaying ? 'bg-indigo-600 text-white animate-pulse' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
+              className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${isPlaying ? 'bg-green-600 text-white animate-pulse' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
             >
               <i className={`fas ${isPlaying ? 'fa-volume-up' : 'fa-play'} text-xl`}></i>
             </button>
@@ -243,7 +243,7 @@ const ShadowingSession: React.FC<ShadowingSessionProps> = ({ tasks: initialTasks
           </div>
 
           {isEvaluating && (
-            <p className="text-sm font-bold text-indigo-600 animate-pulse">Analyzing your voice pattern...</p>
+            <p className="text-sm font-bold text-green-600 animate-pulse">Analyzing your voice pattern...</p>
           )}
 
           {feedback && (
@@ -261,11 +261,11 @@ const ShadowingSession: React.FC<ShadowingSessionProps> = ({ tasks: initialTasks
         </div>
       )}
 
-      <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100">
-        <h3 className="font-bold text-blue-900 text-sm mb-2 flex items-center gap-2">
-          <i className="fas fa-info-circle"></i> Coach's Tip
+      <div className="bg-green-50 p-6 rounded-2xl border border-green-100">
+        <h3 className="font-bold text-green-900 text-sm mb-2 flex items-center gap-2">
+          <i className="fas fa-info-circle"></i> Priya's Tip
         </h3>
-        <p className="text-xs text-blue-700 leading-relaxed">
+        <p className="text-xs text-green-700 leading-relaxed">
           The mirror technique helps you unlearn Odia sentence rhythms. Try to match the AI's speed exactly, especially when linking words together like "I-have-been."
         </p>
       </div>

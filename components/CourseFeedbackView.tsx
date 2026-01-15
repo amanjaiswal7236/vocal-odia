@@ -13,13 +13,13 @@ const CourseFeedbackView: React.FC<CourseFeedbackViewProps> = ({ feedback, cours
   return (
     <div className="max-w-3xl mx-auto py-8 animate-in fade-in slide-in-from-bottom duration-700">
       <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
-        <div className="bg-indigo-600 p-8 text-white text-center relative overflow-hidden">
+        <div className="bg-slate-800 p-8 text-white text-center relative overflow-hidden">
           <div className="relative z-10">
             <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white/30">
               <i className="fas fa-medal text-4xl"></i>
             </div>
             <h1 className="text-3xl font-black">Course Completed!</h1>
-            <p className="text-indigo-100 font-medium">Linguistic Analysis for: {courseTitle}</p>
+            <p className="text-slate-200 font-medium">Linguistic Analysis for: {courseTitle}</p>
           </div>
           <div className="absolute top-0 right-0 p-4 opacity-10">
             <i className="fas fa-certificate text-9xl"></i>
@@ -29,9 +29,9 @@ const CourseFeedbackView: React.FC<CourseFeedbackViewProps> = ({ feedback, cours
         <div className="p-8 space-y-8">
           <section>
             <h2 className="text-xl font-bold text-gray-900 mb-3 flex items-center gap-2">
-              <i className="fas fa-quote-left text-indigo-400"></i> Coach's Summary
+              <i className="fas fa-quote-left text-green-600"></i> Priya's Summary
             </h2>
-            <div className="p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100 leading-relaxed text-gray-700 italic">
+            <div className="p-5 bg-green-50/50 rounded-2xl border border-green-100 leading-relaxed text-gray-700 italic">
               "{feedback.summary}"
             </div>
           </section>
@@ -73,7 +73,7 @@ const CourseFeedbackView: React.FC<CourseFeedbackViewProps> = ({ feedback, cours
 
           <button 
             onClick={onContinue}
-            className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all active:scale-[0.98]"
+            className="w-full bg-green-600 text-white font-black py-4 rounded-2xl shadow-xl hover:bg-green-700 transition-all active:scale-[0.98]"
           >
             Unlock Next Course
           </button>

@@ -48,6 +48,10 @@ export default function DashboardPage() {
     router.push('/sessions');
   };
 
+  const handleViewScenarios = () => {
+    router.push('/scenarios');
+  };
+
   return (
     <>
       {error && (
@@ -73,6 +77,7 @@ export default function DashboardPage() {
         onOpenCourse={handleOpenCourse}
         onStartShadowing={handleStartShadowing}
         onViewSessions={handleViewSessions}
+        onViewScenarios={handleViewScenarios}
         scenarios={scenarios}
         nuggets={nuggets}
         course={courses[0] || { id: '', title: '', level: 'BEGINNER' as any, description: '', modules: [] }}

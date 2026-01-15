@@ -37,14 +37,14 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack }) => {
         <div className="space-y-6">
           <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm text-center">
             <div className="relative inline-block mb-4">
-              <img src={user.avatar} alt={user.name} className="w-24 h-24 rounded-full border-4 border-indigo-50 shadow-md mx-auto" />
+              <img src={user.avatar} alt={user.name} className="w-24 h-24 rounded-full border-4 border-green-50 shadow-md mx-auto" />
               <div className="absolute bottom-0 right-0 w-8 h-8 bg-green-500 border-4 border-white rounded-full flex items-center justify-center text-white text-[10px]">
                 <i className="fas fa-check"></i>
               </div>
             </div>
             <h2 className="text-xl font-bold text-gray-900">{user.name}</h2>
             <div className="flex justify-center gap-2 mt-4">
-              <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
+              <span className="bg-green-50 text-green-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
                 Intermediate
               </span>
               <span className="bg-orange-50 text-orange-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
@@ -53,12 +53,12 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack }) => {
             </div>
           </div>
 
-          <div className="bg-indigo-900 rounded-3xl p-8 text-white relative overflow-hidden">
-            <h3 className="font-bold text-sm uppercase tracking-widest text-indigo-300 mb-4">Next Badge</h3>
+          <div className="bg-slate-800 rounded-3xl p-8 text-white relative overflow-hidden">
+            <h3 className="font-bold text-sm uppercase tracking-widest text-slate-300 mb-4">Next Badge</h3>
             <div className="text-center py-4">
                <span className="text-6xl grayscale opacity-50">🥇</span>
                <p className="mt-4 font-bold">Puri Gold</p>
-               <p className="text-[10px] text-indigo-300">Need 7 more sessions</p>
+               <p className="text-[10px] text-slate-300">Need 7 more sessions</p>
             </div>
             <div className="absolute -bottom-8 -right-8 opacity-10">
                <i className="fas fa-trophy text-9xl"></i>
@@ -81,7 +81,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack }) => {
           {/* Mistake Bank */}
           <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">
             <h3 className="font-bold text-lg text-gray-900 mb-6 flex items-center gap-2">
-              <i className="fas fa-shield-virus text-indigo-400"></i> Odinglish Mistake Bank
+              <i className="fas fa-shield-virus text-green-600"></i> Odinglish Mistake Bank
             </h3>
             <div className="space-y-4">
               <div className="p-4 bg-red-50/50 rounded-2xl border border-red-100">
@@ -108,7 +108,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack }) => {
             <div className="space-y-4">
               <div className="flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm">
                 <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center">
                     <i className="fas fa-graduation-cap"></i>
                   </div>
                   <div>
@@ -116,7 +116,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack }) => {
                     <p className="text-[10px] text-gray-400 font-bold uppercase">2 Days Ago</p>
                   </div>
                 </div>
-                <span className="text-xs font-black text-indigo-600">Lvl 1</span>
+                <span className="text-xs font-black text-green-600">Lvl 1</span>
               </div>
             </div>
           </div>

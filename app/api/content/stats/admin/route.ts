@@ -13,24 +13,68 @@ export async function GET(req: NextRequest) {
       );
     }
     
-    // Get aggregated stats
-    const statsResult = await query(`
-      SELECT 
-        COALESCE(SUM(tokens), 0) as total_tokens,
-        COALESCE(SUM(sessions), 0) as total_sessions,
-        COUNT(*) as total_users
-      FROM users
-      WHERE role = 'user'
+    // Get actual token usage from sessions table (more accurate)
+    const tokensResult = await query(`
+      SELECT COALESCE(SUM(tokens_used), 0) as total_tokens
+      FROM user_sessions
     `);
     
-    const stats = statsResult.rows[0];
+    // Get session count
+    const sessionsResult = await query(`
+      SELECT COUNT(*) as total_sessions
+      FROM user_sessions
+    `);
+    
+    // Get unique users count
+    const usersResult = await query(`
+      SELECT COUNT(DISTINCT user_id) as total_users
+      FROM user_sessions
+    `);
+    
+    // Get token usage over last 7 days for graph
+    const dailyTokensResult = await query(`
+      SELECT 
+        DATE(started_at) as date,
+        SUM(tokens_used) as tokens
+      FROM user_sessions
+      WHERE started_at >= NOW() - INTERVAL '7 days'
+      GROUP BY DATE(started_at)
+      ORDER BY DATE(started_at)
+    `);
+    
+    // Get token usage by user (top 10)
+    const userTokensResult = await query(`
+      SELECT 
+        u.id,
+        u.name,
+        u.avatar,
+        SUM(us.tokens_used) as total_tokens,
+        COUNT(us.id) as session_count
+      FROM users u
+      LEFT JOIN user_sessions us ON u.id = us.user_id
+      WHERE u.role = 'user'
+      GROUP BY u.id, u.name, u.avatar
+      ORDER BY total_tokens DESC NULLS LAST
+      LIMIT 10
+    `);
     
     return NextResponse.json({
-      tokensUsed: parseInt(stats.total_tokens) || 0,
-      sessionsCount: parseInt(stats.total_sessions) || 0,
-      uniqueUsers: parseInt(stats.total_users) || 0,
+      tokensUsed: parseInt(tokensResult.rows[0]?.total_tokens || '0'),
+      sessionsCount: parseInt(sessionsResult.rows[0]?.total_sessions || '0'),
+      uniqueUsers: parseInt(usersResult.rows[0]?.total_users || '0'),
       lastActive: Date.now(),
-      errorCount: 0
+      errorCount: 0,
+      dailyTokens: dailyTokensResult.rows.map((row: any) => ({
+        date: row.date,
+        tokens: parseInt(row.tokens || '0')
+      })),
+      userTokens: userTokensResult.rows.map((row: any) => ({
+        userId: row.id.toString(),
+        name: row.name,
+        avatar: row.avatar,
+        tokens: parseInt(row.total_tokens || '0'),
+        sessions: parseInt(row.session_count || '0')
+      }))
     });
   } catch (error: any) {
     if (error.message === 'Unauthorized') {

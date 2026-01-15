@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
-import { SYSTEM_INSTRUCTION } from '@/lib/constants';
+import { SYSTEM_INSTRUCTION, AI_AGENT } from '@/lib/constants';
 import { Scenario, TranscriptionItem } from '@/types';
 import { decode, decodeAudioData, createBlob } from '@/lib/utils/audioUtils';
 import VoiceVisualizer from './VoiceVisualizer';
@@ -322,7 +322,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
           responseModalities: [Modality.AUDIO],
           systemInstruction: `${SYSTEM_INSTRUCTION}\n\nTASK: ${scenario.prompt || scenario.title}`,
           speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'aoede' } }
           },
           inputAudioTranscription: {},
           outputAudioTranscription: {}
@@ -493,7 +493,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-2.0-flash-exp',
-        contents: `You are a friendly English language coach. Describe this scenario to the learner in a warm, encouraging way. Keep it brief (2-3 sentences) and explain what they will practice. Scenario: ${scenario.title}. Description: ${scenario.description}. Prompt: ${scenario.prompt}. Only respond with the description, no additional text.`,
+        contents: `You are ${AI_AGENT.NAME}, a friendly English language coach. Describe this scenario to the learner in a warm, encouraging way. Keep it brief (2-3 sentences) and explain what they will practice. Scenario: ${scenario.title}. Description: ${scenario.description}. Prompt: ${scenario.prompt}. Only respond with the description, no additional text.`,
       });
       
       const aiDescription = response.text?.trim();
@@ -564,8 +564,33 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
         await new Promise(resolve => setTimeout(resolve, 50));
         
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US';
+        utterance.lang = 'en-IN'; // Indian English
         utterance.rate = 0.9;
+        utterance.pitch = 1.1; // Slightly higher pitch for female voice
+        
+        // Try to select a female Indian English voice if available
+        const voices = speechSynthesis.getVoices();
+        const indianFemaleVoice = voices.find(voice => 
+          voice.lang.startsWith('en-IN') && 
+          (voice.name.toLowerCase().includes('female') || 
+           voice.name.toLowerCase().includes('priya') ||
+           voice.name.toLowerCase().includes('neural') ||
+           voice.name.toLowerCase().includes('woman') ||
+           voice.name.toLowerCase().includes('girl'))
+        );
+        
+        if (indianFemaleVoice) {
+          utterance.voice = indianFemaleVoice;
+          console.log('Using Indian female voice:', indianFemaleVoice.name);
+        } else {
+          // Fallback: try to find any Indian English voice
+          const indianVoice = voices.find(voice => voice.lang.startsWith('en-IN'));
+          if (indianVoice) {
+            utterance.voice = indianVoice;
+            console.log('Using Indian voice:', indianVoice.name);
+          }
+        }
+        
         descriptionSpeechSynthesisRef.current = utterance;
         setIsSpeakingDescription(true);
         
@@ -612,7 +637,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'aoede' } }
           }
         },
       });
@@ -862,7 +887,16 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
   };
 
   const handleEnd = () => {
-    const estimatedTokens = Math.ceil(totalCharsTracked.current / 4) + 100;
+    // Token estimation: 
+    // - Average English text: ~3.5-4 characters per token
+    // - System prompts and overhead: ~100-150 tokens
+    // - Audio processing overhead: ~50 tokens
+    // Using 4 chars/token for conservative estimate
+    const textTokens = Math.ceil(totalCharsTracked.current / 4);
+    const systemOverhead = 150; // System prompts, audio processing, etc.
+    const estimatedTokens = textTokens + systemOverhead;
+    
+    console.log(`Session ended - Characters: ${totalCharsTracked.current}, Estimated tokens: ${estimatedTokens}`);
     onEnd(estimatedTokens, transcriptions);
   };
 
@@ -871,7 +905,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
     return (
       <div className="flex flex-col h-[calc(100vh-8rem)] bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100 animate-in zoom-in duration-300">
         {/* Header */}
-        <div className={`p-6 flex justify-between items-center text-white ${scenario.isCourseLesson ? 'bg-gradient-to-r from-green-600 to-teal-700' : 'bg-gradient-to-r from-blue-600 to-indigo-700'}`}>
+        <div className={`p-6 flex justify-between items-center text-white ${scenario.isCourseLesson ? 'bg-gradient-to-r from-green-600 to-teal-700' : 'bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800'}`}>
           <div>
             <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-2 py-0.5 rounded">
               {scenario.isCourseLesson ? 'Course Mode' : 'Scenario Mode'}
@@ -902,27 +936,27 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
           <div className="max-w-2xl w-full space-y-6">
             <div className="bg-white rounded-2xl p-8 shadow-md border border-gray-100">
               <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                  <i className={`fas ${scenario.icon} text-indigo-600 text-xl`}></i>
+                <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                  <i className={`fas ${scenario.icon} text-green-600 text-xl`}></i>
                 </div>
                 <div className="flex-1">
                   <h3 className="text-xl font-bold text-gray-900 mb-3">{scenario.title}</h3>
                   <p className="text-gray-600 mb-4 leading-relaxed">{scenario.description}</p>
                   
                   {isGeneratingDescription ? (
-                    <div className="flex items-center gap-3 text-indigo-600">
+                    <div className="flex items-center gap-3 text-green-600">
                       <i className="fas fa-circle-notch fa-spin"></i>
-                      <p className="text-sm font-medium">AI Coach is preparing your scenario...</p>
+                      <p className="text-sm font-medium">{AI_AGENT.NAME} is preparing your scenario...</p>
                     </div>
                   ) : descriptionText ? (
-                    <div className="bg-indigo-50 rounded-xl p-6 border-l-4 border-indigo-500">
+                    <div className="bg-green-50 rounded-xl p-6 border-l-4 border-green-500">
                       <div className="flex items-start gap-3">
-                        <div className={`w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0 ${isSpeakingDescription ? 'animate-pulse' : ''}`}>
+                        <div className={`w-8 h-8 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0 ${isSpeakingDescription ? 'animate-pulse' : ''}`}>
                           <i className={`fas ${isSpeakingDescription ? 'fa-volume-up' : 'fa-brain'} text-white text-sm`}></i>
                         </div>
                         <div className="flex-1">
-                          <p className="text-sm font-bold text-indigo-900 mb-2">
-                            AI Coach {isSpeakingDescription ? 'is speaking...' : 'says:'}
+                          <p className="text-sm font-bold text-green-900 mb-2">
+                            {AI_AGENT.NAME} {isSpeakingDescription ? 'is speaking...' : 'says:'}
                           </p>
                           <p className="text-gray-700 leading-relaxed">{descriptionText}</p>
                         </div>
@@ -947,7 +981,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
                   return (
                     <button
                       onClick={handleStartConversation}
-                      className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-bold py-4 px-8 rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 flex items-center justify-center gap-3 text-lg"
+                      className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold py-4 px-8 rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 flex items-center justify-center gap-3 text-lg"
                     >
                       <i className="fas fa-play-circle"></i>
                       <span>Start Conversation</span>
@@ -956,9 +990,9 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
                 } else {
                   return (
                     <div className="w-full space-y-3">
-                      <div className="bg-indigo-100 text-indigo-700 font-medium py-4 px-8 rounded-2xl flex items-center justify-center gap-3">
+                      <div className="bg-green-100 text-green-700 font-medium py-4 px-8 rounded-2xl flex items-center justify-center gap-3">
                         <i className="fas fa-volume-up animate-pulse"></i>
-                        <span>Listening to AI Coach...</span>
+                        <span>Listening to {AI_AGENT.NAME}...</span>
                       </div>
                       <button
                         onClick={handleStartConversation}
@@ -974,14 +1008,14 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
                 return (
                   <div className="w-full space-y-3">
                     {isGeneratingDescription ? (
-                      <div className="bg-indigo-100 text-indigo-700 font-medium py-4 px-8 rounded-2xl flex items-center justify-center gap-3">
+                      <div className="bg-green-100 text-green-700 font-medium py-4 px-8 rounded-2xl flex items-center justify-center gap-3">
                         <i className="fas fa-circle-notch fa-spin"></i>
                         <span>Preparing scenario...</span>
                       </div>
                     ) : (
                       <button
                         onClick={handleStartConversation}
-                        className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-bold py-4 px-8 rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 flex items-center justify-center gap-3 text-lg"
+                        className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold py-4 px-8 rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 flex items-center justify-center gap-3 text-lg"
                       >
                         <i className="fas fa-play-circle"></i>
                         <span>Start Conversation</span>
@@ -1001,7 +1035,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100 animate-in zoom-in duration-300">
       {/* Header */}
-      <div className={`p-6 flex justify-between items-center text-white ${scenario.isCourseLesson ? 'bg-gradient-to-r from-green-600 to-teal-700' : 'bg-gradient-to-r from-blue-600 to-indigo-700'}`}>
+      <div className={`p-6 flex justify-between items-center text-white ${scenario.isCourseLesson ? 'bg-gradient-to-r from-green-600 to-teal-700' : 'bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800'}`}>
         <div>
           <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-2 py-0.5 rounded">
             {scenario.isCourseLesson ? 'Course Mode' : 'Scenario Mode'}
@@ -1029,12 +1063,12 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
       
       {/* AI Speaking First Indicator */}
       {isWaitingForAiGreeting && (
-        <div className="mx-6 mt-4 bg-indigo-50 border-l-4 border-indigo-500 p-4 rounded-lg">
+        <div className="mx-6 mt-4 bg-green-50 border-l-4 border-green-500 p-4 rounded-lg">
           <div className="flex items-center gap-3">
-            <i className="fas fa-volume-up text-indigo-600 animate-pulse"></i>
+            <i className="fas fa-volume-up text-green-600 animate-pulse"></i>
             <div>
-              <p className="text-sm font-bold text-indigo-900">AI Coach is speaking first...</p>
-              <p className="text-xs text-indigo-700 mt-1">Please wait for the AI to finish before you speak.</p>
+              <p className="text-sm font-bold text-green-900">{AI_AGENT.NAME} is speaking first...</p>
+              <p className="text-xs text-green-700 mt-1">Please wait for {AI_AGENT.NAME} to finish before you speak.</p>
             </div>
           </div>
         </div>
@@ -1057,15 +1091,15 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
       <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4 bg-gray-50/50">
         {!isReady && !error && (
           <div className="flex-1 flex flex-col items-center justify-center text-center opacity-50 space-y-4">
-            <i className="fas fa-circle-notch fa-spin text-3xl text-blue-600"></i>
-            <p className="text-lg">Connecting to AI agent...</p>
+            <i className="fas fa-circle-notch fa-spin text-3xl text-green-600"></i>
+            <p className="text-lg">Connecting to {AI_AGENT.NAME}...</p>
           </div>
         )}
         
         {transcriptions.map((t, i) => (
           <div key={i} className={`flex ${t.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] p-4 rounded-2xl shadow-sm ${t.sender === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none'}`}>
-              <p className="text-sm font-medium mb-1 opacity-70">{t.sender === 'user' ? 'You' : 'Coach'}</p>
+            <div className={`max-w-[80%] p-4 rounded-2xl shadow-sm ${t.sender === 'user' ? 'bg-green-600 text-white rounded-tr-none' : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none'}`}>
+              <p className="text-sm font-medium mb-1 opacity-70">{t.sender === 'user' ? 'You' : AI_AGENT.NAME}</p>
               <p className="leading-relaxed">{t.text}</p>
             </div>
           </div>
@@ -1079,27 +1113,27 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
         <div className="flex items-center gap-12">
           <div className="text-center">
             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">You</p>
-            <VoiceVisualizer isActive={isUserSpeaking} color="bg-blue-400" />
+            <VoiceVisualizer isActive={isUserSpeaking} color="bg-green-400" />
           </div>
           
           <div className="relative">
-             <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-500 shadow-lg ${isAiSpeaking ? 'bg-indigo-600' : 'bg-gray-200'} scale-110`}>
+             <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-500 shadow-lg ${isAiSpeaking ? 'bg-slate-700' : 'bg-gray-200'} scale-110`}>
                 <i className={`fas ${scenario.isCourseLesson ? 'fa-graduation-cap' : 'fa-brain'} text-2xl ${isAiSpeaking ? 'text-white' : 'text-gray-400'}`}></i>
              </div>
-             {isAiSpeaking && <div className="absolute -inset-2 border-2 border-indigo-200 rounded-full animate-ping opacity-20"></div>}
+             {isAiSpeaking && <div className="absolute -inset-2 border-2 border-green-200 rounded-full animate-ping opacity-20"></div>}
           </div>
 
           <div className="text-center">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">AI Coach</p>
-            <VoiceVisualizer isActive={isAiSpeaking} color="bg-indigo-400" />
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{AI_AGENT.NAME}</p>
+            <VoiceVisualizer isActive={isAiSpeaking} color="bg-slate-500" />
           </div>
         </div>
         <p className="text-gray-500 text-sm font-medium italic">
           {isPaused ? "Conversation paused. Click Resume to continue." :
            !isReady ? "Connecting..." : 
-           isWaitingForAiGreeting ? "AI Coach is introducing the scenario..." :
-           isAiSpeaking ? "Coach is speaking..." : 
-           !micInputEnabledRef.current ? "Waiting for AI to speak first..." :
+           isWaitingForAiGreeting ? `${AI_AGENT.NAME} is introducing the scenario...` :
+           isAiSpeaking ? `${AI_AGENT.NAME} is speaking...` : 
+           !micInputEnabledRef.current ? `Waiting for ${AI_AGENT.NAME} to speak first...` :
            isUserSpeaking ? "Listening to you..." : 
            "You can speak now..."}
         </p>
