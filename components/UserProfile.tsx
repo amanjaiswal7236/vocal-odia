@@ -13,6 +13,7 @@ interface UserProfileProps {
 const UserProfile: React.FC<UserProfileProps> = ({ user, onBack }) => {
   const router = useRouter();
   const [badges, setBadges] = useState<any[]>([]);
+  const [actualSessionCount, setActualSessionCount] = useState<number>(user.sessions);
   const wordsLearned = Math.floor(user.tokens / 150);
 
   const handleViewSessions = () => {
@@ -28,7 +29,20 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack }) => {
         threshold: b.threshold
       })));
     }).catch(console.error);
-  }, []);
+
+    // Fetch actual session count from database
+    const fetchActualSessionCount = async () => {
+      try {
+        const sessions = await contentService.getUserSessions(parseInt(user.id));
+        setActualSessionCount(sessions.length);
+      } catch (error) {
+        console.error('Error fetching session count:', error);
+        // Keep the default value if fetch fails
+      }
+    };
+
+    fetchActualSessionCount();
+  }, [user.id]);
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom duration-500 pb-12">
@@ -76,7 +90,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack }) => {
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
               <p className="text-gray-400 text-xs font-black uppercase tracking-widest mb-1">Total Sessions</p>
-              <p className="text-3xl font-black text-gray-900">{user.sessions}</p>
+              <p className="text-3xl font-black text-gray-900">{actualSessionCount}</p>
             </div>
             <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
               <p className="text-gray-400 text-xs font-black uppercase tracking-widest mb-1">Mistakes Refined</p>
