@@ -65,9 +65,16 @@ ADMIN_PASSWORD=admin123
 
 # Gemini API Key
 NEXT_PUBLIC_GEMINI_API_KEY=your-gemini-api-key
+
+# Azure Blob Storage (Optional - for audio recording storage)
+# Get your connection string from Azure Portal > Storage Account > Access Keys
+AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=YOUR_ACCOUNT;AccountKey=YOUR_KEY;EndpointSuffix=core.windows.net
+AZURE_STORAGE_CONTAINER_NAME=audio-recordings
 ```
 
-**Note:** For production, consider moving the Gemini API key to server-side API routes instead of exposing it to the client.
+**Note:** 
+- For production, consider moving the Gemini API key to server-side API routes instead of exposing it to the client.
+- Azure Blob Storage is optional. If not configured, audio recording features will be skipped gracefully without breaking the app.
 
 ### 4. Initialize Database
 

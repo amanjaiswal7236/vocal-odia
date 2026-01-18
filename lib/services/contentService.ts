@@ -277,6 +277,49 @@ export const contentService = {
     }
   },
 
+  async createSessionEarly(data: {
+    scenarioId: string | null;
+    scenarioTitle: string;
+    isCourseLesson: boolean;
+    courseId: string | null;
+    startedAt: number;
+  }) {
+    try {
+      const response = await fetchWithAuth(`${API_URL}/content/sessions/create-early`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+      });
+      return response.json();
+    } catch (error) {
+      console.error('Failed to create early session:', error);
+      return { success: false };
+    }
+  },
+
+  async updateSession(sessionId: number, data: {
+    tokensUsed: number;
+    durationSeconds: number;
+    messages?: Array<{ text: string; sender: 'user' | 'ai'; timestamp: number; audioUrl?: string | null }>;
+    sessionAudioUrl?: string | null;
+  }) {
+    try {
+      const response = await fetchWithAuth(`${API_URL}/content/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+      });
+      return response.json();
+    } catch (error) {
+      console.error('Failed to update session:', error);
+      return { success: false };
+    }
+  },
+
   async recordSession(data: {
     scenarioId: string | null;
     scenarioTitle: string;

@@ -119,21 +119,77 @@ export default function SessionPage() {
     }
   }, [params.id, scenarios, courses, router, searchParams]);
 
-  const handleEnd = async (estimatedTokens?: number, transcriptions?: any[]) => {
+  const handleEnd = async (estimatedTokens?: number, transcriptions?: any[], sessionAudioUrl?: string | null, sessionId?: number | null) => {
     const durationSeconds = Math.floor((Date.now() - sessionStartTime) / 1000);
     
-    // Record session in database
+    // Update session with final data (session should already exist from early creation)
     if (currentUser && scenario) {
-      await contentService.recordSession({
-        scenarioId: scenario.id,
-        scenarioTitle: scenario.title,
-        isCourseLesson: scenario.isCourseLesson || false,
-        courseId: activeCourseId || null,
-        tokensUsed: estimatedTokens || 0,
-        durationSeconds,
-        startedAt: sessionStartTime,
-        messages: transcriptions || []
-      });
+      try {
+        // Use the sessionId directly if provided, otherwise try to find it
+        if (sessionId) {
+          // Direct update using the known sessionId
+          const updateResult = await contentService.updateSession(sessionId, {
+            tokensUsed: estimatedTokens || 0,
+            durationSeconds,
+            messages: transcriptions || [],
+            sessionAudioUrl: sessionAudioUrl || null
+          });
+          
+          if (updateResult.success) {
+            console.log('Session updated successfully with sessionId:', sessionId, 'audio URL:', sessionAudioUrl);
+          } else {
+            console.error('Session update returned unsuccessful result:', updateResult);
+          }
+        } else {
+          // Fallback: find the session if sessionId not provided
+          const token = localStorage.getItem('token');
+          if (token) {
+            const sessionsResponse = await fetch(`/api/content/users/${currentUser.id}/sessions`, {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            
+            if (sessionsResponse.ok) {
+              const sessions = await sessionsResponse.json();
+              const latestSession = sessions.find((s: any) => 
+                s.scenarioId === scenario.id && 
+                s.startedAt >= sessionStartTime - 5000 && // Within 5 seconds of start
+                !s.endedAt // Only find active sessions
+              );
+              
+              if (latestSession) {
+                const updateResult = await contentService.updateSession(parseInt(latestSession.id), {
+                  tokensUsed: estimatedTokens || 0,
+                  durationSeconds,
+                  messages: transcriptions || [],
+                  sessionAudioUrl: sessionAudioUrl || null
+                });
+                
+                if (updateResult.success) {
+                  console.log('Session updated (found by search) with audio URL:', sessionAudioUrl);
+                } else {
+                  console.error('Session update returned unsuccessful result:', updateResult);
+                }
+              } else {
+                // Fallback: create session if not found
+                await contentService.recordSession({
+                  scenarioId: scenario.id,
+                  scenarioTitle: scenario.title,
+                  isCourseLesson: scenario.isCourseLesson || false,
+                  courseId: activeCourseId || null,
+                  tokensUsed: estimatedTokens || 0,
+                  durationSeconds,
+                  startedAt: sessionStartTime,
+                  messages: transcriptions || []
+                });
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error updating session:', err);
+      }
     }
     
     if (estimatedTokens && currentUser) {
@@ -202,6 +258,6 @@ export default function SessionPage() {
     return null;
   }
 
-  return <LiveSession scenario={scenario} onEnd={handleEnd} />;
+  return <LiveSession scenario={scenario} courseId={activeCourseId} onEnd={handleEnd} />;
 }
 

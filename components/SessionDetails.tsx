@@ -16,6 +16,8 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
   const { showToast } = useToast();
   const [messages, setMessages] = useState<TranscriptionItem[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(true);
+  const [playingAudioIndex, setPlayingAudioIndex] = useState<number | null>(null);
+  const audioRefs = React.useRef<Map<number, HTMLAudioElement>>(new Map());
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
     return date.toLocaleDateString('en-US', {
@@ -43,8 +45,10 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
   const loadMessages = async () => {
     try {
       setLoadingMessages(true);
+      // Messages API now returns SAS token URLs directly
       const data = await contentService.getSessionMessages(parseInt(session.id));
       setMessages(data);
+      console.log('Loaded messages:', data.length, 'messages with audio URLs');
     } catch (err) {
       showToast(getErrorMessage(err), 'error');
     } finally {
@@ -58,6 +62,42 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const handleMessageClick = (index: number, message: TranscriptionItem) => {
+    if (!message.audioUrl) return;
+
+    const audio = audioRefs.current.get(index);
+    if (audio) {
+      if (playingAudioIndex === index && !audio.paused) {
+        // Pause if currently playing
+        audio.pause();
+        setPlayingAudioIndex(null);
+      } else {
+        // Stop any currently playing audio
+        if (playingAudioIndex !== null) {
+          const currentAudio = audioRefs.current.get(playingAudioIndex);
+          if (currentAudio) {
+            currentAudio.pause();
+            currentAudio.currentTime = 0;
+          }
+        }
+        // Play the clicked message audio
+        audio.currentTime = 0;
+        audio.play();
+        setPlayingAudioIndex(index);
+      }
+    }
+  };
+
+  const handleAudioEnded = (index: number) => {
+    setPlayingAudioIndex(null);
+  };
+
+  const handleAudioPause = (index: number) => {
+    if (playingAudioIndex === index) {
+      setPlayingAudioIndex(null);
+    }
   };
 
   return (
@@ -128,7 +168,7 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
           )}
         </div>
 
-        {/* Additional Details */}
+        {/* Additional Details
         <div className="pt-6 border-t border-gray-100 space-y-4">
           {session.scenarioId && (
             <div className="flex items-center justify-between py-3">
@@ -148,7 +188,7 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
             <span className="text-sm font-medium text-gray-600">Session ID</span>
             <span className="text-sm font-mono text-gray-900 bg-gray-50 px-3 py-1 rounded-lg">{session.id}</span>
           </div>
-        </div>
+        </div> */}
 
         {/* Status Badge */}
         <div className="pt-6 border-t border-gray-100">
@@ -160,6 +200,24 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
           </div>
         </div>
       </div>
+
+      {/* Session Audio Player */}
+      {session.sessionAudioUrl && (
+        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-2xl border border-indigo-100">
+          <div className="flex items-center gap-3 mb-3">
+            <i className="fas fa-headphones text-indigo-600 text-xl"></i>
+            <h3 className="font-bold text-indigo-900">Full Session Audio</h3>
+          </div>
+          <audio 
+            controls 
+            src={session.sessionAudioUrl}
+            className="w-full mt-2"
+            preload="metadata"
+          >
+            Your browser does not support the audio element.
+          </audio>
+        </div>
+      )}
 
       {/* Conversation Section */}
       <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100">
@@ -190,20 +248,62 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
                   </div>
                 )}
                 <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-3 ${
+                  className={`max-w-[75%] rounded-2xl px-4 py-3 transition-all ${
                     message.sender === 'user'
                       ? 'bg-green-600 text-white'
                       : 'bg-gray-100 text-gray-900'
+                  } ${
+                    message.audioUrl 
+                      ? 'cursor-pointer hover:shadow-lg transform hover:scale-[1.02]' 
+                      : ''
+                  } ${
+                    playingAudioIndex === index 
+                      ? message.sender === 'user' 
+                        ? 'ring-2 ring-green-300 ring-offset-2' 
+                        : 'ring-2 ring-green-400 ring-offset-2'
+                      : ''
                   }`}
+                  onClick={() => handleMessageClick(index, message)}
                 >
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.text}</p>
-                  <p
-                    className={`text-xs mt-2 ${
-                      message.sender === 'user' ? 'text-green-200' : 'text-gray-500'
-                    }`}
-                  >
-                    {formatMessageTime(message.timestamp)}
-                  </p>
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1">
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.text}</p>
+                      <p
+                        className={`text-xs mt-2 ${
+                          message.sender === 'user' ? 'text-green-200' : 'text-gray-500'
+                        }`}
+                      >
+                        {formatMessageTime(message.timestamp)}
+                      </p>
+                    </div>
+                    {message.audioUrl && (
+                      <div className={`flex-shrink-0 ml-2 ${
+                        message.sender === 'user' ? 'text-green-200' : 'text-gray-600'
+                      }`}>
+                        {playingAudioIndex === index ? (
+                          <i className="fas fa-pause text-lg animate-pulse"></i>
+                        ) : (
+                          <i className="fas fa-play text-lg"></i>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {message.audioUrl && (
+                    <audio 
+                      ref={(audio) => {
+                        if (audio) {
+                          audioRefs.current.set(index, audio);
+                          audio.addEventListener('ended', () => handleAudioEnded(index));
+                          audio.addEventListener('pause', () => handleAudioPause(index));
+                        } else {
+                          audioRefs.current.delete(index);
+                        }
+                      }}
+                      src={message.audioUrl}
+                      preload="metadata"
+                      className="hidden"
+                    />
+                  )}
                 </div>
                 {message.sender === 'user' && (
                   <div className="w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center flex-shrink-0">

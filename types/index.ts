@@ -116,12 +116,14 @@ export interface UserSession {
   durationSeconds: number;
   startedAt: number;
   endedAt: number | null;
+  sessionAudioUrl?: string | null;
 }
 
 export interface TranscriptionItem {
   text: string;
   sender: 'user' | 'ai';
   timestamp: number;
+  audioUrl?: string | null;
 }
 
 export interface AuthUser {

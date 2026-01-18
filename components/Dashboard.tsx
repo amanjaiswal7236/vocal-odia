@@ -11,7 +11,6 @@ interface DashboardProps {
   onStartScenario: (scenario: Scenario) => void;
   onOpenCourse: () => void;
   onStartShadowing: () => void;
-  onViewSessions: () => void;
   onViewScenarios: () => void;
   scenarios: Scenario[];
   nuggets: DailyNugget[];
@@ -23,7 +22,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   onStartScenario, 
   onOpenCourse, 
   onStartShadowing,
-  onViewSessions,
   onViewScenarios,
   scenarios, 
   nuggets, 
@@ -65,14 +63,11 @@ const Dashboard: React.FC<DashboardProps> = ({
               <button onClick={onOpenCourse} className="bg-green-500 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-green-600 transition-all flex items-center gap-2">
                 <i className="fas fa-book-open"></i> Guided Lesson
               </button>
-              <button onClick={onStartShadowing} className="bg-white/10 backdrop-blur-sm border border-white/30 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-white/20 transition-all flex items-center gap-2">
+              {/* <button onClick={onStartShadowing} className="bg-white/10 backdrop-blur-sm border border-white/30 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-white/20 transition-all flex items-center gap-2">
                 <i className="fas fa-volume-up"></i> Pronunciation
-              </button>
+              </button> */}
               <button onClick={onViewScenarios} className="bg-white/10 backdrop-blur-sm border border-white/30 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-white/20 transition-all flex items-center gap-2">
                 <i className="fas fa-comments"></i> Scenarios
-              </button>
-              <button onClick={onViewSessions} className="bg-white/10 backdrop-blur-sm border border-white/30 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-white/20 transition-all flex items-center gap-2">
-                <i className="fas fa-history"></i> Sessions
               </button>
             </div>
           </div>
@@ -95,8 +90,8 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </section>
 
-      <div className="grid md:grid-cols-3 gap-8">
-        <div className="md:col-span-2 space-y-8">
+      <div className="space-y-8">
+        <div className="space-y-8">
           {/* Quests Section - Hidden */}
           {/* <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
             <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-gray-900">
@@ -137,9 +132,9 @@ const Dashboard: React.FC<DashboardProps> = ({
             <h2 className="text-xl font-bold flex items-center gap-2">
               <i className="fas fa-comments text-green-600"></i> Live Lab Scenarios
             </h2>
-            <div className="grid sm:grid-cols-2 gap-4">
+            <div className="grid sm:grid-cols-3 gap-4">
               {scenarios.length === 0 ? (
-                <div className="col-span-2">
+                <div className="col-span-3">
                   <EmptyState
                     icon="fa-comments"
                     title="No scenarios available"
@@ -171,9 +166,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
 
-        <div className="space-y-8">
-          {/* Daily Nugget Section - Hidden */}
-          {/* <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+        {/* Daily Nugget Section - Hidden */}
+        {/* <div className="space-y-8">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
             <h2 className="font-bold mb-4 flex items-center gap-2"><i className="fas fa-lightbulb text-yellow-500"></i> Daily Nugget</h2>
             {nuggets.length === 0 ? (
               <EmptyState
@@ -189,10 +184,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </div>
               ))
             )}
-          </div> */}
+          </div>
 
-          {/* Milestones Section - Hidden */}
-          {/* <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100">
+          <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100">
             <h2 className="font-bold mb-4 flex items-center gap-2 text-indigo-900"><i className="fas fa-trophy text-indigo-600"></i> Milestones</h2>
             {badgesLoading ? (
               <LoadingSpinner size="sm" />
@@ -212,8 +206,8 @@ const Dashboard: React.FC<DashboardProps> = ({
               </div>
               ))
             )}
-          </div> */}
-        </div>
+          </div>
+        </div> */}
       </div>
     </div>
   );

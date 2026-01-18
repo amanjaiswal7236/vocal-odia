@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { requireAuth } from '@/lib/auth/middleware';
+import { generateSasToken } from '@/lib/services/azureBlobService';
 
 export async function GET(
   req: NextRequest,
@@ -40,17 +41,43 @@ export async function GET(
         text,
         sender,
         timestamp,
+        audio_url,
         created_at
       FROM conversation_messages
       WHERE session_id = $1
       ORDER BY timestamp ASC
     `, [sessionId]);
     
-    const messages = result.rows.map((row: any) => ({
-      id: row.id.toString(),
-      text: row.text,
-      sender: row.sender,
-      timestamp: parseInt(row.timestamp) || new Date(row.created_at).getTime()
+    // Map messages and generate SAS tokens for audio URLs
+    const messages = await Promise.all(result.rows.map(async (row: any) => {
+      let audioUrl = row.audio_url || null;
+      
+      // If audio URL exists, try to generate a SAS token for it
+      if (audioUrl) {
+        try {
+          // Extract blob name from URL
+          // URL format: https://account.blob.core.windows.net/container/blob-name
+          const urlParts = audioUrl.split('/');
+          if (urlParts.length >= 5) {
+            const blobName = urlParts.slice(4).join('/');
+            const sasUrl = await generateSasToken(blobName, 24);
+            if (sasUrl) {
+              audioUrl = sasUrl;
+            }
+          }
+        } catch (err) {
+          console.error(`Error generating SAS token for message ${row.id}:`, err);
+          // Keep original URL if SAS token generation fails
+        }
+      }
+      
+      return {
+        id: row.id.toString(),
+        text: row.text,
+        sender: row.sender,
+        timestamp: parseInt(row.timestamp) || new Date(row.created_at).getTime(),
+        audioUrl: audioUrl
+      };
     }));
     
     return NextResponse.json(messages);

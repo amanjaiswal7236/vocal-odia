@@ -33,6 +33,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [userSessions, setUserSessions] = useState<UserSession[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [sessionMessages, setSessionMessages] = useState<Array<{ id: string; text: string; sender: 'user' | 'ai'; timestamp: number; audioUrl?: string | null }>>([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<UserSession | null>(null);
   
   // Scenarios State
   const [isAddingScenario, setIsAddingScenario] = useState(false);
@@ -578,13 +582,116 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {activeTab === 'users' && (
           <div className="space-y-4 animate-in fade-in duration-300">
-            {selectedUserId ? (
+            {selectedSessionId ? (
+              <div>
+                <div className="flex items-center gap-4 mb-6">
+                  <button 
+                    onClick={() => {
+                      setSelectedSessionId(null);
+                      setSessionMessages([]);
+                      setSelectedSession(null);
+                    }}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <i className="fas fa-arrow-left"></i>
+                  </button>
+                  <h3 className="font-bold text-lg flex items-center gap-2">
+                    <i className="fas fa-comments text-indigo-600"></i> 
+                    Conversation: {selectedSession?.scenarioTitle || 'Session'}
+                  </h3>
+                </div>
+                {loadingMessages ? (
+                  <div className="text-center py-12 text-gray-400">
+                    <i className="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                    <p>Loading conversation...</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Session Audio Player */}
+                    {selectedSession?.sessionAudioUrl && (
+                      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-2xl border border-indigo-100">
+                        <div className="flex items-center gap-3 mb-3">
+                          <i className="fas fa-headphones text-indigo-600 text-xl"></i>
+                          <h4 className="font-bold text-indigo-900">Full Session Audio</h4>
+                        </div>
+                        <audio 
+                          controls 
+                          src={selectedSession.sessionAudioUrl}
+                          className="w-full mt-2"
+                          preload="metadata"
+                        >
+                          Your browser does not support the audio element.
+                        </audio>
+                      </div>
+                    )}
+                    
+                    {/* Messages */}
+                    {sessionMessages.length === 0 ? (
+                      <div className="text-center py-12 text-gray-400">
+                        <i className="fas fa-comment-slash text-4xl mb-4"></i>
+                        <p>No messages found in this session</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {sessionMessages.map((message, index) => (
+                          <div 
+                            key={message.id || index}
+                            className={`p-4 rounded-2xl border ${
+                              message.sender === 'user' 
+                                ? 'bg-blue-50 border-blue-100 ml-8' 
+                                : 'bg-green-50 border-green-100 mr-8'
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                message.sender === 'user' 
+                                  ? 'bg-blue-600 text-white' 
+                                  : 'bg-green-600 text-white'
+                              }`}>
+                                <i className={`fas ${message.sender === 'user' ? 'fa-user' : 'fa-robot'} text-xs`}></i>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="font-bold text-sm text-gray-900">
+                                    {message.sender === 'user' ? 'User' : 'AI Assistant'}
+                                  </span>
+                                  <span className="text-xs text-gray-400">
+                                    {formatDate(message.timestamp)}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-700 mb-3 whitespace-pre-wrap break-words">
+                                  {message.text}
+                                </p>
+                                {message.audioUrl && (
+                                  <div className="mt-3 pt-3 border-t border-gray-200">
+                                    <audio 
+                                      controls 
+                                      src={message.audioUrl}
+                                      className="w-full"
+                                      preload="metadata"
+                                    >
+                                      Your browser does not support the audio element.
+                                    </audio>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : selectedUserId ? (
               <div>
                 <div className="flex items-center gap-4 mb-6">
                   <button 
                     onClick={() => {
                       setSelectedUserId(null);
                       setUserSessions([]);
+                      setSelectedSessionId(null);
+                      setSessionMessages([]);
                     }}
                     className="text-gray-400 hover:text-gray-600 transition-colors"
                   >
@@ -615,11 +722,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <th className="px-6 py-4">Tokens</th>
                           <th className="px-6 py-4">Duration</th>
                           <th className="px-6 py-4">Date</th>
+                          <th className="px-6 py-4 text-right">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y text-sm">
                         {userSessions.map(session => (
-                          <tr key={session.id}>
+                          <tr key={session.id} className="hover:bg-gray-50 transition-colors">
                             <td className="px-6 py-4 font-bold">{session.scenarioTitle}</td>
                             <td className="px-6 py-4">
                               <span className={`text-xs font-bold px-2 py-1 rounded ${session.isCourseLesson ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
@@ -633,6 +741,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 : 'N/A'}
                             </td>
                             <td className="px-6 py-4 text-gray-400">{formatDate(session.startedAt)}</td>
+                            <td className="px-6 py-4 text-right">
+                              <button 
+                                onClick={async () => {
+                                  setSelectedSessionId(session.id);
+                                  setSelectedSession(session);
+                                  setLoadingMessages(true);
+                                  try {
+                                    const messages = await contentService.getSessionMessages(parseInt(session.id));
+                                    setSessionMessages(messages);
+                                  } catch (error) {
+                                    console.error('Failed to load messages:', error);
+                                    setSessionMessages([]);
+                                  } finally {
+                                    setLoadingMessages(false);
+                                  }
+                                }}
+                                className="text-indigo-600 hover:bg-indigo-50 p-2 rounded-lg"
+                                title="View conversation"
+                              >
+                                <i className="fas fa-comments"></i>
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>

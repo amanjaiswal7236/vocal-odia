@@ -44,10 +44,6 @@ export default function DashboardPage() {
     router.push('/shadowing');
   };
 
-  const handleViewSessions = () => {
-    router.push('/sessions');
-  };
-
   const handleViewScenarios = () => {
     router.push('/scenarios');
   };
@@ -76,7 +72,6 @@ export default function DashboardPage() {
         onStartScenario={handleStartScenario}
         onOpenCourse={handleOpenCourse}
         onStartShadowing={handleStartShadowing}
-        onViewSessions={handleViewSessions}
         onViewScenarios={handleViewScenarios}
         scenarios={scenarios}
         nuggets={nuggets}

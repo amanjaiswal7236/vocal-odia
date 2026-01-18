@@ -5,22 +5,66 @@ import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { SYSTEM_INSTRUCTION, AI_AGENT } from '@/lib/constants';
 import { Scenario, TranscriptionItem } from '@/types';
 import { decode, decodeAudioData, createBlob } from '@/lib/utils/audioUtils';
+import { encodeAudioBufferToWav } from '@/lib/utils/audioEncoder';
+import { createAudioRecorder, uploadSessionAudio } from '@/lib/services/audioRecordingService';
 import VoiceVisualizer from './VoiceVisualizer';
 import { useToast } from '@/components/Toast';
 import { getErrorMessage } from '@/lib/utils/errorHandler';
 
 interface LiveSessionProps {
   scenario: Scenario;
-  onEnd: (estimatedTokens?: number, transcriptions?: TranscriptionItem[]) => void;
+  courseId?: string | null;
+  onEnd: (estimatedTokens?: number, transcriptions?: TranscriptionItem[], sessionAudioUrl?: string | null, sessionId?: number | null) => void;
 }
 
-const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
+const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) => {
   const { showToast } = useToast();
   const [isReady, setIsReady] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [isUserSpeaking, setIsUserSpeaking] = useState(false);
   const [transcriptions, setTranscriptions] = useState<TranscriptionItem[]>([]);
+  const transcriptionsRef = useRef<TranscriptionItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  
+  // Helper to update both state and ref
+  const updateTranscriptions = (updater: (prev: TranscriptionItem[]) => TranscriptionItem[]) => {
+    setTranscriptions(prev => {
+      const newTranscriptions = updater(prev);
+      transcriptionsRef.current = newTranscriptions;
+      return newTranscriptions;
+    });
+  };
+
+  // Save message to database immediately
+  const saveMessageToDB = async (text: string, sender: 'user' | 'ai', timestamp: number) => {
+    if (!sessionIdRef.current) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      
+      const response = await fetch(`/api/content/sessions/${sessionIdRef.current}/messages/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          text,
+          sender,
+          timestamp
+        })
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        return result.messageId;
+      }
+    } catch (err) {
+      console.error('Error saving message to DB:', err);
+    }
+    return null;
+  };
   const [showDescription, setShowDescription] = useState(true);
   const [descriptionText, setDescriptionText] = useState<string>('');
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
@@ -63,17 +107,100 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
   const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  // Audio Recording Refs
+  const sessionAudioRecorderRef = useRef<MediaRecorder | null>(null);
+  const sessionAudioChunksRef = useRef<Blob[]>([]);
+  const sessionAudioDestinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const sessionAudioStreamRef = useRef<MediaStream | null>(null);
+  const messageAudioMapRef = useRef<Map<number, { userAudio?: Blob; aiAudio?: Blob }>>(new Map());
+  const currentUserAudioChunksRef = useRef<Blob[]>([]);
+  const currentAiAudioChunksRef = useRef<Blob[]>([]);
+  const isRecordingUserAudioRef = useRef(false);
+  const userAudioRecorderRef = useRef<MediaRecorder | null>(null);
+  const sessionStartTimeRef = useRef<number>(Date.now());
+  const sessionIdRef = useRef<number | null>(null);
+
   // Data Tracking
   const currentInputTranscription = useRef('');
   const currentOutputTranscription = useRef('');
   const totalCharsTracked = useRef(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  
+  // Map to store messageId by message index
+  const messageIdMapRef = useRef<Map<number, number>>(new Map());
+
+  // Helper function to update message audio URL in database using messageId
+  const updateMessageAudioInDB = async (sessionId: number, messageId: number, audioUrl: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      
+      const response = await fetch(`/api/content/sessions/${sessionId}/messages/${messageId}/audio`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          audioUrl
+        })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to update message audio URL:', response.status, errorText);
+      } else {
+        console.log(`Successfully updated message ${messageId} with audio URL`);
+      }
+    } catch (err) {
+      console.error('Error updating message audio URL:', err);
+    }
+  };
 
   const initializeAudio = async () => {
     try {
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      // Initialize combined session audio recorder (user + AI)
+      // We need to mix both audio sources in an AudioContext before recording
+      if (outputAudioContextRef.current && streamRef.current) {
+        // Create a mixing audio context for the combined recording
+        // Use the output context (24000 Hz) to match AI audio sample rate
+        const mixingContext = outputAudioContextRef.current;
+        
+        // Create destination for mixed audio (user + AI)
+        sessionAudioDestinationRef.current = mixingContext.createMediaStreamDestination();
+        
+        // Create a source from the microphone stream
+        const micSource = mixingContext.createMediaStreamSource(streamRef.current);
+        
+        // Connect microphone to the destination (this will be mixed with AI audio)
+        micSource.connect(sessionAudioDestinationRef.current);
+        
+        console.log('Microphone connected to session recorder');
+        console.log('Session destination stream tracks:', sessionAudioDestinationRef.current.stream.getTracks().length);
+        
+        // Create recorder for the mixed stream
+        const sessionRecorder = createAudioRecorder(sessionAudioDestinationRef.current.stream);
+        if (sessionRecorder) {
+          sessionAudioRecorderRef.current = sessionRecorder;
+          sessionAudioChunksRef.current = [];
+          
+          sessionRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              sessionAudioChunksRef.current.push(event.data);
+              console.log('Session audio chunk received:', event.data.size, 'bytes');
+            }
+          };
+          
+          // Start recording session audio immediately
+          sessionRecorder.start(1000); // Collect data every second
+          console.log('Session audio recording started with mixed stream');
+        }
+      }
+      
       return true;
     } catch (e) {
       const errorMessage = 'Microphone access denied. Please check your browser permissions.';
@@ -91,6 +218,38 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
     if (!apiKey) {
       setError('Gemini API key is not configured.');
       return;
+    }
+
+    // Create session early to get sessionId for real-time audio uploads
+    try {
+      const token = localStorage.getItem('token');
+      if (token) {
+        const response = await fetch('/api/content/sessions/create-early', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            scenarioId: scenario.id,
+            scenarioTitle: scenario.title,
+            isCourseLesson: scenario.isCourseLesson || false,
+            courseId: courseId || null,
+            startedAt: sessionStartTimeRef.current
+          })
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.sessionId) {
+            sessionIdRef.current = result.sessionId;
+            console.log('Session created early with ID:', result.sessionId);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error creating early session:', err);
+      // Continue even if session creation fails
     }
 
     // Reset states for new session
@@ -150,9 +309,37 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
                   setIsAiSpeaking(true);
                   const audioBuffer = await decodeAudioData(decode(base64Audio), ctx, 24000, 1);
                   
+                  // Record AI audio chunk for individual message
+                  try {
+                    const wavBlob = encodeAudioBufferToWav(audioBuffer);
+                    currentAiAudioChunksRef.current.push(wavBlob);
+                  } catch (err) {
+                    console.error('Error encoding AI audio chunk:', err);
+                  }
+                  
+                  // Use a gain node to split the signal to both playback and recording
+                  const gainNode = ctx.createGain();
+                  gainNode.gain.value = 1.0;
+                  
                   const source = ctx.createBufferSource();
                   source.buffer = audioBuffer;
-                  source.connect(ctx.destination);
+                  source.connect(gainNode);
+                  
+                  // Connect to speakers for playback
+                  gainNode.connect(ctx.destination);
+                  
+                  // Also connect to session audio destination to capture AI audio in session recording
+                  // This will mix with the microphone audio that's already connected
+                  if (sessionAudioDestinationRef.current) {
+                    try {
+                      gainNode.connect(sessionAudioDestinationRef.current);
+                      console.log('AI audio connected to session recorder');
+                    } catch (err) {
+                      console.error('Error connecting AI audio to session recorder:', err);
+                    }
+                  } else {
+                    console.warn('sessionAudioDestinationRef is null - AI audio will not be recorded in session');
+                  }
 
                   const startTime = Math.max(nextStartTimeRef.current, ctx.currentTime);
                   
@@ -187,7 +374,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
               totalCharsTracked.current += outputText.length;
               
               // Update transcriptions in real-time for AI speech
-              setTranscriptions(prev => {
+              updateTranscriptions(prev => {
                 const newTranscriptions = [...prev];
                 const lastIndex = newTranscriptions.length - 1;
                 
@@ -217,11 +404,27 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
             
             const inputText = message.serverContent?.inputTranscription?.text;
             if (inputText) {
+              // Start recording user audio when they start speaking
+              if (!isRecordingUserAudioRef.current && streamRef.current && userAudioRecorderRef.current === null) {
+                const userRecorder = createAudioRecorder(streamRef.current);
+                if (userRecorder) {
+                  userAudioRecorderRef.current = userRecorder;
+                  isRecordingUserAudioRef.current = true;
+                  currentUserAudioChunksRef.current = [];
+                  userRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0 && isRecordingUserAudioRef.current) {
+                      currentUserAudioChunksRef.current.push(event.data);
+                    }
+                  };
+                  userRecorder.start(100); // Collect data every 100ms
+                }
+              }
+              
               currentInputTranscription.current += inputText;
               totalCharsTracked.current += inputText.length;
               
               // Update transcriptions in real-time for user speech
-              setTranscriptions(prev => {
+              updateTranscriptions(prev => {
                 const newTranscriptions = [...prev];
                 const lastIndex = newTranscriptions.length - 1;
                 
@@ -246,48 +449,259 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
             if (message.serverContent?.turnComplete) {
               // Finalize transcriptions when turn is complete
               if (currentInputTranscription.current) {
-                setTranscriptions(prev => {
+                // Stop recording user audio
+                if (isRecordingUserAudioRef.current && userAudioRecorderRef.current && userAudioRecorderRef.current.state === 'recording') {
+                  userAudioRecorderRef.current.stop();
+                  isRecordingUserAudioRef.current = false;
+                }
+                
+                // Combine user audio chunks
+                let userAudioBlob: Blob | null = null;
+                const userChunkCount = currentUserAudioChunksRef.current.length;
+                if (userChunkCount > 0) {
+                  console.log(`[turnComplete] Combining ${userChunkCount} user audio chunks`);
+                  const totalSize = currentUserAudioChunksRef.current.reduce((sum, chunk) => sum + chunk.size, 0);
+                  console.log(`[turnComplete] Total user audio chunks size: ${totalSize} bytes`);
+                  userAudioBlob = new Blob(currentUserAudioChunksRef.current, { type: 'audio/webm' });
+                  console.log(`[turnComplete] Created user audio blob: ${userAudioBlob.size} bytes, type: ${userAudioBlob.type}`);
+                  currentUserAudioChunksRef.current = [];
+                } else {
+                  console.warn(`[turnComplete] No user audio chunks to combine`);
+                }
+                
+                // Reset recorder for next message
+                userAudioRecorderRef.current = null;
+                
+                const timestamp = Date.now();
+                let messageIndex: number = transcriptionsRef.current.length;
+                
+                updateTranscriptions(prev => {
                   const newTranscriptions = [...prev];
                   const lastIndex = newTranscriptions.length - 1;
                   
                   // Update the last user message if it exists, otherwise add new one
                   if (lastIndex >= 0 && newTranscriptions[lastIndex].sender === 'user') {
+                    messageIndex = lastIndex;
                     newTranscriptions[lastIndex] = {
                       ...newTranscriptions[lastIndex],
                       text: currentInputTranscription.current
                     };
                   } else {
+                    messageIndex = newTranscriptions.length;
                     newTranscriptions.push({
                       text: currentInputTranscription.current,
                       sender: 'user',
-                      timestamp: Date.now()
+                      timestamp: timestamp
                     });
                   }
+                  
                   return newTranscriptions;
                 });
+                
+                // Save message to DB immediately and wait for messageId
+                const messageId = await saveMessageToDB(currentInputTranscription.current, 'user', timestamp);
+                
+                if (messageId) {
+                  messageIdMapRef.current.set(messageIndex, messageId);
+                  console.log(`[turnComplete] Saved user message to DB with messageId: ${messageId} at index ${messageIndex}`);
+                } else {
+                  console.warn(`[turnComplete] Failed to save user message to DB, messageId is null`);
+                }
+                
+                // Store user audio for this message
+                if (userAudioBlob && userAudioBlob.size > 0) {
+                  console.log(`[turnComplete] User audio blob ready: ${userAudioBlob.size} bytes for message ${messageIndex}`);
+                  const audioMap = messageAudioMapRef.current.get(messageIndex) || {};
+                  audioMap.userAudio = userAudioBlob;
+                  messageAudioMapRef.current.set(messageIndex, audioMap);
+                  
+                  // Upload user audio in real-time if sessionId is available
+                  if (sessionIdRef.current) {
+                    console.log(`[turnComplete] Starting upload for user audio, message ${messageIndex}, sessionId: ${sessionIdRef.current}`);
+                    
+                    // Upload via API route (server-side)
+                    const token = localStorage.getItem('token');
+                    if (token) {
+                      const formData = new FormData();
+                      formData.append('audio', userAudioBlob, `user-message-${messageIndex}.webm`);
+                      formData.append('sender', 'user');
+                      formData.append('messageIndex', messageIndex.toString());
+                      
+                      fetch(`/api/content/sessions/${sessionIdRef.current}/messages/audio`, {
+                        method: 'POST',
+                        headers: {
+                          'Authorization': `Bearer ${token}`
+                        },
+                        body: formData
+                      })
+                        .then(async (response) => {
+                          if (response.ok) {
+                            const result = await response.json();
+                            const audioUrl = result.audioUrl;
+                            if (audioUrl) {
+                              console.log(`[turnComplete] User audio uploaded successfully for message ${messageIndex}:`, audioUrl);
+                              // Update transcriptions to include audio URL
+                              updateTranscriptions(prev => {
+                                const updated = [...prev];
+                                if (updated[messageIndex] && updated[messageIndex].sender === 'user') {
+                                  updated[messageIndex] = {
+                                    ...updated[messageIndex],
+                                    audioUrl: audioUrl
+                                  };
+                                }
+                                return updated;
+                              });
+                              // Update message in DB using messageId if available
+                              if (messageId) {
+                                updateMessageAudioInDB(sessionIdRef.current!, messageId, audioUrl);
+                              } else {
+                                console.warn(`[turnComplete] No messageId available for message ${messageIndex}, cannot update audio URL in DB`);
+                              }
+                            } else {
+                              console.warn(`[turnComplete] User audio upload returned null for message ${messageIndex}`);
+                            }
+                          } else {
+                            const errorText = await response.text();
+                            console.error(`[turnComplete] Failed to upload user audio for message ${messageIndex}:`, response.status, errorText);
+                          }
+                        })
+                        .catch(err => {
+                          console.error(`[turnComplete] Error uploading user audio for message ${messageIndex}:`, err);
+                        });
+                    } else {
+                      console.warn(`[turnComplete] No auth token available, cannot upload user audio for message ${messageIndex}`);
+                    }
+                  } else {
+                    console.warn(`[turnComplete] No sessionId available, cannot upload user audio for message ${messageIndex}`);
+                  }
+                } else {
+                  console.warn(`[turnComplete] User audio blob is empty or null for message ${messageIndex}`);
+                }
+                
                 currentInputTranscription.current = '';
               }
               
               if (currentOutputTranscription.current) {
-                setTranscriptions(prev => {
+                // Combine AI audio chunks
+                let aiAudioBlob: Blob | null = null;
+                const aiChunkCount = currentAiAudioChunksRef.current.length;
+                if (aiChunkCount > 0) {
+                  console.log(`[turnComplete] Combining ${aiChunkCount} AI audio chunks`);
+                  const totalSize = currentAiAudioChunksRef.current.reduce((sum, chunk) => sum + chunk.size, 0);
+                  console.log(`[turnComplete] Total AI audio chunks size: ${totalSize} bytes`);
+                  aiAudioBlob = new Blob(currentAiAudioChunksRef.current, { type: 'audio/wav' });
+                  console.log(`[turnComplete] Created AI audio blob: ${aiAudioBlob.size} bytes, type: ${aiAudioBlob.type}`);
+                  currentAiAudioChunksRef.current = [];
+                } else {
+                  console.warn(`[turnComplete] No AI audio chunks to combine`);
+                }
+                
+                const timestamp = Date.now();
+                let messageIndex: number = transcriptionsRef.current.length;
+                
+                updateTranscriptions(prev => {
                   const newTranscriptions = [...prev];
                   const lastIndex = newTranscriptions.length - 1;
                   
                   // Update the last AI message if it exists, otherwise add new one
                   if (lastIndex >= 0 && newTranscriptions[lastIndex].sender === 'ai') {
+                    messageIndex = lastIndex;
                     newTranscriptions[lastIndex] = {
                       ...newTranscriptions[lastIndex],
                       text: currentOutputTranscription.current
                     };
                   } else {
+                    messageIndex = newTranscriptions.length;
                     newTranscriptions.push({
                       text: currentOutputTranscription.current,
                       sender: 'ai',
-                      timestamp: Date.now()
+                      timestamp: timestamp
                     });
                   }
+                  
                   return newTranscriptions;
                 });
+                
+                // Save message to DB immediately and wait for messageId
+                const messageId = await saveMessageToDB(currentOutputTranscription.current, 'ai', timestamp);
+                
+                if (messageId) {
+                  messageIdMapRef.current.set(messageIndex, messageId);
+                  console.log(`[turnComplete] Saved AI message to DB with messageId: ${messageId} at index ${messageIndex}`);
+                } else {
+                  console.warn(`[turnComplete] Failed to save AI message to DB, messageId is null`);
+                }
+                
+                // Store AI audio for this message
+                if (aiAudioBlob && aiAudioBlob.size > 0) {
+                  console.log(`[turnComplete] AI audio blob ready: ${aiAudioBlob.size} bytes for message ${messageIndex}`);
+                  const audioMap = messageAudioMapRef.current.get(messageIndex) || {};
+                  audioMap.aiAudio = aiAudioBlob;
+                  messageAudioMapRef.current.set(messageIndex, audioMap);
+                  
+                  // Upload AI audio in real-time if sessionId is available
+                  if (sessionIdRef.current) {
+                    console.log(`[turnComplete] Starting upload for AI audio, message ${messageIndex}, sessionId: ${sessionIdRef.current}`);
+                    
+                    // Upload via API route (server-side)
+                    const token = localStorage.getItem('token');
+                    if (token) {
+                      const formData = new FormData();
+                      formData.append('audio', aiAudioBlob, `ai-message-${messageIndex}.wav`);
+                      formData.append('sender', 'ai');
+                      formData.append('messageIndex', messageIndex.toString());
+                      
+                      fetch(`/api/content/sessions/${sessionIdRef.current}/messages/audio`, {
+                        method: 'POST',
+                        headers: {
+                          'Authorization': `Bearer ${token}`
+                        },
+                        body: formData
+                      })
+                        .then(async (response) => {
+                          if (response.ok) {
+                            const result = await response.json();
+                            const audioUrl = result.audioUrl;
+                            if (audioUrl) {
+                              console.log(`[turnComplete] AI audio uploaded successfully for message ${messageIndex}:`, audioUrl);
+                              // Update transcriptions to include audio URL
+                              updateTranscriptions(prev => {
+                                const updated = [...prev];
+                                if (updated[messageIndex] && updated[messageIndex].sender === 'ai') {
+                                  updated[messageIndex] = {
+                                    ...updated[messageIndex],
+                                    audioUrl: audioUrl
+                                  };
+                                }
+                                return updated;
+                              });
+                              // Update message in DB using messageId if available
+                              if (messageId) {
+                                updateMessageAudioInDB(sessionIdRef.current!, messageId, audioUrl);
+                              } else {
+                                console.warn(`[turnComplete] No messageId available for message ${messageIndex}, cannot update audio URL in DB`);
+                              }
+                            } else {
+                              console.warn(`[turnComplete] AI audio upload returned null for message ${messageIndex}`);
+                            }
+                          } else {
+                            const errorText = await response.text();
+                            console.error(`[turnComplete] Failed to upload AI audio for message ${messageIndex}:`, response.status, errorText);
+                          }
+                        })
+                        .catch(err => {
+                          console.error(`[turnComplete] Error uploading AI audio for message ${messageIndex}:`, err);
+                        });
+                    } else {
+                      console.warn(`[turnComplete] No auth token available, cannot upload AI audio for message ${messageIndex}`);
+                    }
+                  } else {
+                    console.warn(`[turnComplete] No sessionId available, cannot upload AI audio for message ${messageIndex}`);
+                  }
+                } else {
+                  console.warn(`[turnComplete] AI audio blob is empty or null for message ${messageIndex}`);
+                }
+                
                 currentOutputTranscription.current = '';
                 
                 // After AI finishes speaking the first time, enable microphone input
@@ -685,6 +1099,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
           
           // Handle errors by wrapping start() in try-catch
           try {
+            console.log('Starting audio playback');
             source.start(0);
           } catch (error) {
             console.error('Description audio playback error:', error);
@@ -718,9 +1133,6 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
               reject(error);
             }
           }
-          
-          console.log('Starting audio playback');
-          source.start(0);
         });
       } else {
         console.warn('No audio data in response, falling back to browser TTS');
@@ -886,7 +1298,82 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
     }
   };
 
-  const handleEnd = () => {
+  const handleEnd = async () => {
+    // Close the session connection first
+    try {
+      if (sessionRef.current) {
+        console.log('Closing session connection...');
+        sessionRef.current.close();
+        sessionRef.current = null;
+      }
+    } catch (err) {
+      console.error('Error closing session:', err);
+    }
+
+    // Stop all audio sources
+    try {
+      sourcesRef.current.forEach(s => {
+        try {
+          s.stop();
+        } catch (e) {
+          // Ignore errors
+        }
+      });
+      sourcesRef.current.clear();
+    } catch (err) {
+      console.error('Error stopping audio sources:', err);
+    }
+
+    // Stop microphone stream
+    try {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+    } catch (err) {
+      console.error('Error stopping microphone stream:', err);
+    }
+
+    // Close audio contexts
+    try {
+      if (audioContextRef.current) {
+        await audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
+      if (outputAudioContextRef.current) {
+        await outputAudioContextRef.current.close();
+        outputAudioContextRef.current = null;
+      }
+    } catch (err) {
+      console.error('Error closing audio contexts:', err);
+    }
+
+    // Stop session audio recorder
+    let sessionAudioBlob: Blob | null = null;
+    if (sessionAudioRecorderRef.current && sessionAudioRecorderRef.current.state !== 'inactive') {
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => resolve(), 2000);
+        if (sessionAudioRecorderRef.current) {
+          const originalOnStop = sessionAudioRecorderRef.current.onstop;
+          sessionAudioRecorderRef.current.onstop = (event) => {
+            if (originalOnStop) originalOnStop.call(sessionAudioRecorderRef.current!, event);
+            clearTimeout(timeout);
+            resolve();
+          };
+          sessionAudioRecorderRef.current.stop();
+        } else {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+      
+      // Combine all session audio chunks
+      if (sessionAudioChunksRef.current.length > 0) {
+        sessionAudioBlob = new Blob(sessionAudioChunksRef.current, { type: 'audio/webm' });
+        console.log(`Session audio created: ${sessionAudioBlob.size} bytes from ${sessionAudioChunksRef.current.length} chunks`);
+      }
+    }
+    
     // Token estimation: 
     // - Average English text: ~3.5-4 characters per token
     // - System prompts and overhead: ~100-150 tokens
@@ -897,7 +1384,46 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, onEnd }) => {
     const estimatedTokens = textTokens + systemOverhead;
     
     console.log(`Session ended - Characters: ${totalCharsTracked.current}, Estimated tokens: ${estimatedTokens}`);
-    onEnd(estimatedTokens, transcriptions);
+    
+    // Upload session audio if available and sessionId exists
+    let sessionAudioUrl: string | null = null;
+    if (sessionAudioBlob && sessionAudioBlob.size > 0 && sessionIdRef.current) {
+      try {
+        const token = localStorage.getItem('token');
+        if (token) {
+          const formData = new FormData();
+          formData.append('audio', sessionAudioBlob, 'session-audio.webm');
+          
+          const response = await fetch(`/api/content/sessions/${sessionIdRef.current}/audio`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formData
+          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            sessionAudioUrl = result.audioUrl || null;
+            console.log('Session audio uploaded:', sessionAudioUrl);
+          } else {
+            console.error('Failed to upload session audio:', response.statusText);
+          }
+        }
+      } catch (err) {
+        console.error('Error uploading session audio:', err);
+      }
+    }
+    
+    // Use ref to get the latest transcriptions (state might be stale)
+    const latestTranscriptions = transcriptionsRef.current.length > 0 
+      ? transcriptionsRef.current 
+      : transcriptions;
+    
+    console.log(`Ending session with ${latestTranscriptions.length} transcriptions:`, latestTranscriptions);
+    
+    // Pass sessionAudioUrl (string) and sessionId to parent
+    onEnd(estimatedTokens, latestTranscriptions, sessionAudioUrl, sessionIdRef.current);
   };
 
   // Show description phase

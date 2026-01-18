@@ -148,10 +148,27 @@ export const initContentTables = async () => {
         duration_seconds INTEGER DEFAULT 0,
         started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         ended_at TIMESTAMP,
+        session_audio_url TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     console.log('✓ User sessions table created/verified');
+
+    // Add session_audio_url column if it doesn't exist
+    try {
+      const columnCheck = await query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'user_sessions' AND column_name = 'session_audio_url'
+      `);
+      
+      if (columnCheck.rows.length === 0) {
+        await query('ALTER TABLE user_sessions ADD COLUMN session_audio_url TEXT');
+        console.log('✓ Added session_audio_url column to user_sessions table');
+      }
+    } catch (error: any) {
+      console.log('Session audio URL column check:', error.message);
+    }
 
     // Conversation messages table to store session conversations
     await query(`
@@ -161,10 +178,27 @@ export const initContentTables = async () => {
         text TEXT NOT NULL,
         sender VARCHAR(10) NOT NULL CHECK (sender IN ('user', 'ai')),
         timestamp BIGINT NOT NULL,
+        audio_url TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     console.log('✓ Conversation messages table created/verified');
+
+    // Add audio_url column if it doesn't exist
+    try {
+      const columnCheck = await query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'conversation_messages' AND column_name = 'audio_url'
+      `);
+      
+      if (columnCheck.rows.length === 0) {
+        await query('ALTER TABLE conversation_messages ADD COLUMN audio_url TEXT');
+        console.log('✓ Added audio_url column to conversation_messages table');
+      }
+    } catch (error: any) {
+      console.log('Message audio URL column check:', error.message);
+    }
 
     console.log('Content tables initialized');
   } catch (error) {

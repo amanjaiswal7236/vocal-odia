@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { UserUsage } from '@/types';
 import { contentService } from '@/lib/services/contentService';
 
@@ -10,8 +11,13 @@ interface UserProfileProps {
 }
 
 const UserProfile: React.FC<UserProfileProps> = ({ user, onBack }) => {
+  const router = useRouter();
   const [badges, setBadges] = useState<any[]>([]);
   const wordsLearned = Math.floor(user.tokens / 150);
+
+  const handleViewSessions = () => {
+    router.push('/sessions');
+  };
 
   useEffect(() => {
     contentService.getBadges().then(data => {
@@ -76,6 +82,17 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack }) => {
               <p className="text-gray-400 text-xs font-black uppercase tracking-widest mb-1">Mistakes Refined</p>
               <p className="text-3xl font-black text-gray-900">{user.mistakesFixed?.length || 12}</p>
             </div>
+          </div>
+
+          {/* Session History Button */}
+          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
+            <button
+              onClick={handleViewSessions}
+              className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold py-4 px-6 rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 flex items-center justify-center gap-3"
+            >
+              <i className="fas fa-history text-xl"></i>
+              <span>View Session History</span>
+            </button>
           </div>
 
           {/* Mistake Bank */}
