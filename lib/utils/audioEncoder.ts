@@ -47,3 +47,58 @@ export function encodeAudioBufferToWav(audioBuffer: AudioBuffer): Blob {
   
   return new Blob([buffer], { type: 'audio/wav' });
 }
+
+/**
+ * Combine multiple AudioBuffers into a single AudioBuffer
+ * All buffers must have the same sample rate and number of channels
+ */
+export function combineAudioBuffers(buffers: AudioBuffer[]): AudioBuffer | null {
+  if (buffers.length === 0) return null;
+  if (buffers.length === 1) return buffers[0];
+
+  const firstBuffer = buffers[0];
+  const sampleRate = firstBuffer.sampleRate;
+  const numChannels = firstBuffer.numberOfChannels;
+
+  // Verify all buffers have the same sample rate and channels
+  for (const buffer of buffers) {
+    if (buffer.sampleRate !== sampleRate || buffer.numberOfChannels !== numChannels) {
+      console.error('Cannot combine buffers with different sample rates or channel counts');
+      return null;
+    }
+  }
+
+  // Calculate total length
+  const totalLength = buffers.reduce((sum, buffer) => sum + buffer.length, 0);
+
+  // Create a new AudioContext to create the combined buffer
+  // Note: We'll use the sample rate from the first buffer
+  const ctx = new OfflineAudioContext(numChannels, totalLength, sampleRate);
+  const combinedBuffer = ctx.createBuffer(numChannels, totalLength, sampleRate);
+
+  // Copy data from all buffers into the combined buffer
+  let offset = 0;
+  for (const buffer of buffers) {
+    for (let channel = 0; channel < numChannels; channel++) {
+      const sourceData = buffer.getChannelData(channel);
+      const destData = combinedBuffer.getChannelData(channel);
+      destData.set(sourceData, offset);
+    }
+    offset += buffer.length;
+  }
+
+  return combinedBuffer;
+}
+
+/**
+ * Encode multiple AudioBuffers into a single WAV file
+ * This combines the buffers first, then adds a single WAV header
+ */
+export function encodeAudioBuffersToWav(buffers: AudioBuffer[]): Blob | null {
+  if (buffers.length === 0) return null;
+
+  const combinedBuffer = combineAudioBuffers(buffers);
+  if (!combinedBuffer) return null;
+
+  return encodeAudioBufferToWav(combinedBuffer);
+}

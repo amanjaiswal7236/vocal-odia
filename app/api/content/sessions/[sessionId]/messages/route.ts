@@ -42,6 +42,8 @@ export async function GET(
         sender,
         timestamp,
         audio_url,
+        detected_language,
+        is_flagged,
         created_at
       FROM conversation_messages
       WHERE session_id = $1
@@ -71,13 +73,21 @@ export async function GET(
         }
       }
       
-      return {
+      const message: any = {
         id: row.id.toString(),
         text: row.text,
         sender: row.sender,
         timestamp: parseInt(row.timestamp) || new Date(row.created_at).getTime(),
         audioUrl: audioUrl
       };
+      
+      // Only include language detection data for admins
+      if (user.role === 'admin') {
+        message.detectedLanguage = row.detected_language || null;
+        message.isFlagged = row.is_flagged || false;
+      }
+      
+      return message;
     }));
     
     return NextResponse.json(messages);

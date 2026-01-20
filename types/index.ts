@@ -124,6 +124,8 @@ export interface TranscriptionItem {
   sender: 'user' | 'ai';
   timestamp: number;
   audioUrl?: string | null;
+  detectedLanguage?: string | null;
+  isFlagged?: boolean;
 }
 
 export interface AuthUser {

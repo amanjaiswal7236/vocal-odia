@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { requireAuth } from '@/lib/auth/middleware';
+import { detectLanguage, shouldFlagMessage } from '@/lib/services/languageDetectionService';
 
 /**
  * Update an existing session with final data (tokens, duration, messages)
@@ -81,16 +82,33 @@ export async function PATCH(
         // Use audioUrl from message if provided, otherwise try to match from existing
         const audioUrl = message.audioUrl || existingAudioUrls.get(key) || null;
         
+        // Detect language for user messages only
+        let detectedLanguage = message.detectedLanguage || null;
+        let isFlagged = message.isFlagged || false;
+        
+        if (sender === 'user' && message.text && message.text.trim().length > 0 && !detectedLanguage) {
+          try {
+            const detection = await detectLanguage(message.text);
+            detectedLanguage = detection.language;
+            isFlagged = shouldFlagMessage(detection.language);
+          } catch (error) {
+            console.error('Error detecting language:', error);
+            // Continue without language detection if it fails
+          }
+        }
+        
         try {
           await query(`
-            INSERT INTO conversation_messages (session_id, text, sender, timestamp, audio_url)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO conversation_messages (session_id, text, sender, timestamp, audio_url, detected_language, is_flagged)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
           `, [
             parseInt(sessionId),
             message.text || '',
             sender,
             timestamp,
-            audioUrl
+            audioUrl,
+            detectedLanguage,
+            isFlagged
           ]);
         } catch (err: any) {
           console.error(`Error inserting message for session ${sessionId}:`, err);

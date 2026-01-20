@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth/middleware';
 import { query } from '@/lib/db';
+import { detectLanguage, shouldFlagMessage } from '@/lib/services/languageDetectionService';
 
 /**
  * Create a single message in the database immediately
@@ -29,21 +30,40 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    // Insert message
+    // Detect language for user messages only
+    let detectedLanguage = null;
+    let isFlagged = false;
+    
+    if (sender === 'user' && text && text.trim().length > 0) {
+      try {
+        const detection = await detectLanguage(text);
+        detectedLanguage = detection.language;
+        isFlagged = shouldFlagMessage(detection.language);
+      } catch (error) {
+        console.error('Error detecting language:', error);
+        // Continue without language detection if it fails
+      }
+    }
+
+    // Insert message with language detection data
     const result = await query(`
-      INSERT INTO conversation_messages (session_id, text, sender, timestamp)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO conversation_messages (session_id, text, sender, timestamp, detected_language, is_flagged)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING id
     `, [
       parseInt(sessionId),
       text || '',
       sender || 'user',
-      timestamp || Date.now()
+      timestamp || Date.now(),
+      detectedLanguage,
+      isFlagged
     ]);
 
     return NextResponse.json({ 
       success: true, 
-      messageId: result.rows[0].id 
+      messageId: result.rows[0].id,
+      detectedLanguage: detectedLanguage,
+      isFlagged: isFlagged
     });
   } catch (error: any) {
     if (error.message === 'Unauthorized') {

@@ -34,7 +34,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [userSessions, setUserSessions] = useState<UserSession[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const [sessionMessages, setSessionMessages] = useState<Array<{ id: string; text: string; sender: 'user' | 'ai'; timestamp: number; audioUrl?: string | null }>>([]);
+  const [sessionMessages, setSessionMessages] = useState<Array<{ id: string; text: string; sender: 'user' | 'ai'; timestamp: number; audioUrl?: string | null; detectedLanguage?: string | null; isFlagged?: boolean }>>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [selectedSession, setSelectedSession] = useState<UserSession | null>(null);
   
@@ -633,51 +633,68 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        {sessionMessages.map((message, index) => (
-                          <div 
-                            key={message.id || index}
-                            className={`p-4 rounded-2xl border ${
-                              message.sender === 'user' 
-                                ? 'bg-blue-50 border-blue-100 ml-8' 
-                                : 'bg-green-50 border-green-100 mr-8'
-                            }`}
-                          >
-                            <div className="flex items-start gap-3">
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                message.sender === 'user' 
-                                  ? 'bg-blue-600 text-white' 
-                                  : 'bg-green-600 text-white'
-                              }`}>
-                                <i className={`fas ${message.sender === 'user' ? 'fa-user' : 'fa-robot'} text-xs`}></i>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <span className="font-bold text-sm text-gray-900">
-                                    {message.sender === 'user' ? 'User' : 'AI Assistant'}
-                                  </span>
-                                  <span className="text-xs text-gray-400">
-                                    {formatDate(message.timestamp)}
-                                  </span>
+                        {sessionMessages.map((message, index) => {
+                          const isFlagged = message.isFlagged && message.sender === 'user';
+                          const detectedLanguage = message.detectedLanguage;
+                          
+                          return (
+                            <div 
+                              key={message.id || index}
+                              className={`p-4 rounded-2xl border ${
+                                isFlagged
+                                  ? 'bg-orange-50 border-orange-300 ml-8 ring-2 ring-orange-200'
+                                  : message.sender === 'user' 
+                                    ? 'bg-blue-50 border-blue-100 ml-8' 
+                                    : 'bg-green-50 border-green-100 mr-8'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                  isFlagged
+                                    ? 'bg-orange-600 text-white'
+                                    : message.sender === 'user' 
+                                      ? 'bg-blue-600 text-white' 
+                                      : 'bg-green-600 text-white'
+                                }`}>
+                                  <i className={`fas ${isFlagged ? 'fa-flag' : message.sender === 'user' ? 'fa-user' : 'fa-robot'} text-xs`}></i>
                                 </div>
-                                <p className="text-sm text-gray-700 mb-3 whitespace-pre-wrap break-words">
-                                  {message.text}
-                                </p>
-                                {message.audioUrl && (
-                                  <div className="mt-3 pt-3 border-t border-gray-200">
-                                    <audio 
-                                      controls 
-                                      src={message.audioUrl}
-                                      className="w-full"
-                                      preload="metadata"
-                                    >
-                                      Your browser does not support the audio element.
-                                    </audio>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                    <span className="font-bold text-sm text-gray-900">
+                                      {message.sender === 'user' ? 'User' : 'AI Assistant'}
+                                    </span>
+                                    {isFlagged && detectedLanguage && (
+                                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-200 text-orange-800">
+                                        <i className="fas fa-language mr-1"></i>
+                                        {detectedLanguage.toUpperCase()}
+                                      </span>
+                                    )}
+                                    <span className="text-xs text-gray-400">
+                                      {formatDate(message.timestamp)}
+                                    </span>
                                   </div>
-                                )}
+                                  <p className={`text-sm mb-3 whitespace-pre-wrap break-words ${
+                                    isFlagged ? 'text-orange-900' : 'text-gray-700'
+                                  }`}>
+                                    {message.text}
+                                  </p>
+                                  {message.audioUrl && (
+                                    <div className="mt-3 pt-3 border-t border-gray-200">
+                                      <audio 
+                                        controls 
+                                        src={message.audioUrl}
+                                        className="w-full"
+                                        preload="metadata"
+                                      >
+                                        Your browser does not support the audio element.
+                                      </audio>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

@@ -5,7 +5,7 @@ import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { SYSTEM_INSTRUCTION, AI_AGENT } from '@/lib/constants';
 import { Scenario, TranscriptionItem } from '@/types';
 import { decode, decodeAudioData, createBlob } from '@/lib/utils/audioUtils';
-import { encodeAudioBufferToWav } from '@/lib/utils/audioEncoder';
+import { encodeAudioBuffersToWav } from '@/lib/utils/audioEncoder';
 import { createAudioRecorder, uploadSessionAudio } from '@/lib/services/audioRecordingService';
 import VoiceVisualizer from './VoiceVisualizer';
 import { useToast } from '@/components/Toast';
@@ -102,6 +102,13 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const processingQueueRef = useRef<Promise<void>>(Promise.resolve());
 
+  // AI Audio State (isolated pipeline)
+  // Store raw AudioBuffer objects, not WAV blobs (to avoid multiple WAV headers)
+  const aiAudioChunksRef = useRef<AudioBuffer[]>([]);
+  const aiSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+  const aiProcessingQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const aiAudioFinishWaitersRef = useRef<Set<() => void>>(new Set());
+
   // Session & Stream Refs
   const sessionRef = useRef<any>(null);
   const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
@@ -114,7 +121,6 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
   const sessionAudioStreamRef = useRef<MediaStream | null>(null);
   const messageAudioMapRef = useRef<Map<number, { userAudio?: Blob; aiAudio?: Blob }>>(new Map());
   const currentUserAudioChunksRef = useRef<Blob[]>([]);
-  const currentAiAudioChunksRef = useRef<Blob[]>([]);
   const isRecordingUserAudioRef = useRef(false);
   const userAudioRecorderRef = useRef<MediaRecorder | null>(null);
   const sessionStartTimeRef = useRef<number>(Date.now());
@@ -128,6 +134,165 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
   
   // Map to store messageId by message index
   const messageIdMapRef = useRef<Map<number, number>>(new Map());
+
+  const userAudioStopTimeRef = useRef<number | null>(null);
+
+  // AI Audio Pipeline Functions
+  const handleAiAudioChunk = (base64Audio: string) => {
+    aiProcessingQueueRef.current = aiProcessingQueueRef.current.then(async () => {
+      const ctx = outputAudioContextRef.current;
+      if (!ctx) return;
+
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+
+      setIsAiSpeaking(true);
+
+      const audioBuffer = await decodeAudioData(decode(base64Audio), ctx, 24000, 1);
+
+      // Store raw AudioBuffer (not WAV blob) to avoid multiple WAV headers
+      // We'll combine all buffers into a single WAV file at the end
+      aiAudioChunksRef.current.push(audioBuffer);
+      const totalSamples = aiAudioChunksRef.current.reduce((sum, buf) => sum + buf.length, 0);
+      const estimatedDuration = totalSamples / 24000; // 24kHz sample rate
+      console.log(
+        '[AI AUDIO]',
+        aiAudioChunksRef.current.length,
+        'chunks',
+        totalSamples,
+        'samples',
+        estimatedDuration.toFixed(2),
+        'seconds'
+      );
+
+      // Playback
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+
+      source.connect(ctx.destination);
+
+      // Also record to session stream
+      if (sessionAudioDestinationRef.current) {
+        try {
+          source.connect(sessionAudioDestinationRef.current);
+        } catch (err) {
+          console.error('Error connecting AI audio to session recorder:', err);
+        }
+      }
+
+      source.onended = () => {
+        aiSourcesRef.current.delete(source);
+
+        if (aiSourcesRef.current.size === 0) {
+          setIsAiSpeaking(false);
+          aiAudioFinishWaitersRef.current.forEach(fn => fn());
+          aiAudioFinishWaitersRef.current.clear();
+
+          // After AI finishes speaking the first time, enable microphone input
+          if (isWaitingForAiGreetingRef.current && !micInputEnabledRef.current) {
+            console.log('AI finished speaking - enabling microphone input');
+            setIsWaitingForAiGreeting(false);
+            isWaitingForAiGreetingRef.current = false;
+            micInputEnabledRef.current = true;
+          }
+        }
+      };
+
+      aiSourcesRef.current.add(source);
+      const startTime = Math.max(nextStartTimeRef.current, ctx.currentTime);
+      source.start(startTime);
+      nextStartTimeRef.current = startTime + audioBuffer.duration;
+    });
+  };
+
+  const finalizeAiAudio = async (messageIndex: number, messageId?: number) => {
+    // Wait for decoding queue
+    await aiProcessingQueueRef.current;
+
+    // Wait for playback to finish
+    if (aiSourcesRef.current.size > 0) {
+      await new Promise<void>(resolve => {
+        aiAudioFinishWaitersRef.current.add(resolve);
+      });
+    }
+
+    // Grace period for late chunks
+    await new Promise(r => setTimeout(r, 800));
+    await aiProcessingQueueRef.current;
+
+    const audioBuffers = [...aiAudioChunksRef.current];
+    if (!audioBuffers.length) {
+      console.warn(`[finalizeAiAudio] No AI audio chunks for message ${messageIndex}`);
+      return;
+    }
+
+    // Combine all AudioBuffers into a single WAV file (single header, no corruption)
+    const aiAudioBlob = encodeAudioBuffersToWav(audioBuffers);
+    if (!aiAudioBlob) {
+      console.error(`[finalizeAiAudio] Failed to combine audio buffers for message ${messageIndex}`);
+      aiAudioChunksRef.current = [];
+      return;
+    }
+
+    const totalSamples = audioBuffers.reduce((sum, buf) => sum + buf.length, 0);
+    const durationEstimate = totalSamples / 24000; // 24kHz sample rate
+    console.log(
+      `[finalizeAiAudio] Created AI audio blob: ${aiAudioBlob.size} bytes, ${audioBuffers.length} buffers combined, ${totalSamples} samples, duration: ${durationEstimate.toFixed(2)}s`
+    );
+
+    // IMPORTANT: clear ONLY after successful blob creation
+    aiAudioChunksRef.current = [];
+
+    // Upload AI audio
+    if (sessionIdRef.current) {
+      const token = localStorage.getItem('token');
+      if (token) {
+        const formData = new FormData();
+        formData.append('audio', aiAudioBlob, `ai-message-${messageIndex}.wav`);
+        formData.append('sender', 'ai');
+        formData.append('messageIndex', messageIndex.toString());
+
+        fetch(`/api/content/sessions/${sessionIdRef.current}/messages/audio`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        })
+          .then(async (response) => {
+            if (response.ok) {
+              const result = await response.json();
+              const audioUrl = result.audioUrl;
+              if (audioUrl) {
+                console.log(`[finalizeAiAudio] AI audio uploaded successfully for message ${messageIndex}:`, audioUrl);
+                // Update transcriptions to include audio URL
+                updateTranscriptions(prev => {
+                  const updated = [...prev];
+                  if (updated[messageIndex] && updated[messageIndex].sender === 'ai') {
+                    updated[messageIndex] = {
+                      ...updated[messageIndex],
+                      audioUrl: audioUrl
+                    };
+                  }
+                  return updated;
+                });
+                // Update message in DB using messageId if available
+                if (messageId && sessionIdRef.current) {
+                  updateMessageAudioInDB(sessionIdRef.current, messageId, audioUrl);
+                }
+              }
+            } else {
+              const errorText = await response.text();
+              console.error(`[finalizeAiAudio] Failed to upload AI audio for message ${messageIndex}:`, response.status, errorText);
+            }
+          })
+          .catch(err => {
+            console.error(`[finalizeAiAudio] Error uploading AI audio for message ${messageIndex}:`, err);
+          });
+      }
+    }
+  };
 
   // Helper function to update message audio URL in database using messageId
   const updateMessageAudioInDB = async (sessionId: number, messageId: number, audioUrl: string) => {
@@ -196,7 +361,9 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
           };
           
           // Start recording session audio immediately
-          sessionRecorder.start(1000); // Collect data every second
+          // No timeslice parameter - will collect all audio continuously
+          // When stopped, all remaining data will be available in the final dataavailable event
+          sessionRecorder.start();
           console.log('Session audio recording started with mixed stream');
         }
       }
@@ -297,79 +464,31 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
           },
 
           onmessage: async (message: LiveServerMessage) => {
-            // 1. SEQUENTIAL AUDIO PROCESSING
-            const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-            if (base64Audio && !isPausedRef.current) {
-              processingQueueRef.current = processingQueueRef.current.then(async () => {
-                try {
-                  const ctx = outputAudioContextRef.current;
-                  if (!ctx) return;
-                  if (ctx.state === 'suspended') await ctx.resume();
-
-                  setIsAiSpeaking(true);
-                  const audioBuffer = await decodeAudioData(decode(base64Audio), ctx, 24000, 1);
-                  
-                  // Record AI audio chunk for individual message
-                  try {
-                    const wavBlob = encodeAudioBufferToWav(audioBuffer);
-                    currentAiAudioChunksRef.current.push(wavBlob);
-                  } catch (err) {
-                    console.error('Error encoding AI audio chunk:', err);
-                  }
-                  
-                  // Use a gain node to split the signal to both playback and recording
-                  const gainNode = ctx.createGain();
-                  gainNode.gain.value = 1.0;
-                  
-                  const source = ctx.createBufferSource();
-                  source.buffer = audioBuffer;
-                  source.connect(gainNode);
-                  
-                  // Connect to speakers for playback
-                  gainNode.connect(ctx.destination);
-                  
-                  // Also connect to session audio destination to capture AI audio in session recording
-                  // This will mix with the microphone audio that's already connected
-                  if (sessionAudioDestinationRef.current) {
-                    try {
-                      gainNode.connect(sessionAudioDestinationRef.current);
-                      console.log('AI audio connected to session recorder');
-                    } catch (err) {
-                      console.error('Error connecting AI audio to session recorder:', err);
-                    }
-                  } else {
-                    console.warn('sessionAudioDestinationRef is null - AI audio will not be recorded in session');
-                  }
-
-                  const startTime = Math.max(nextStartTimeRef.current, ctx.currentTime);
-                  
-                  source.onended = () => {
-                    sourcesRef.current.delete(source);
-                    if (sourcesRef.current.size === 0) {
-                      setIsAiSpeaking(false);
-                      
-                      // After AI finishes speaking the first time, enable microphone input
-                      if (isWaitingForAiGreetingRef.current && !micInputEnabledRef.current) {
-                        console.log('AI finished speaking - enabling microphone input');
-                        setIsWaitingForAiGreeting(false);
-                        isWaitingForAiGreetingRef.current = false;
-                        micInputEnabledRef.current = true;
-                      }
-                    }
-                  };
-
-                  source.start(startTime);
-                  nextStartTimeRef.current = startTime + audioBuffer.duration;
-                  sourcesRef.current.add(source);
-                } catch (err) {
-                  console.error('Audio playback error:', err);
+            // 1. AI AUDIO PROCESSING (clean pipeline)
+            // CRITICAL: Gemini sends audio as MULTIPLE parts, not just parts[0]
+            const parts = message.serverContent?.modelTurn?.parts;
+            if (Array.isArray(parts)) {
+              console.log('[GEMINI PARTS]', parts.length, 'parts in this message');
+              for (const part of parts) {
+                const base64Audio = part?.inlineData?.data;
+                if (base64Audio && !isPausedRef.current) {
+                  handleAiAudioChunk(base64Audio);
                 }
-              });
+              }
             }
 
             // 2. TRANSCRIPTION LOGIC - Real-time updates
             const outputText = message.serverContent?.outputTranscription?.text;
             if (outputText) {
+              // Check if this is the start of a NEW AI message (no current output transcription)
+              const isNewAiMessage = currentOutputTranscription.current.length === 0;
+              
+              // If this is a new AI message, clear any leftover chunks from previous message
+              if (isNewAiMessage && aiAudioChunksRef.current.length > 0) {
+                console.log(`[AI Audio] Starting new AI message - clearing ${aiAudioChunksRef.current.length} leftover chunks from previous message`);
+                aiAudioChunksRef.current = [];
+              }
+              
               currentOutputTranscription.current += outputText;
               totalCharsTracked.current += outputText.length;
               
@@ -414,9 +533,12 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
                   userRecorder.ondataavailable = (event) => {
                     if (event.data.size > 0 && isRecordingUserAudioRef.current) {
                       currentUserAudioChunksRef.current.push(event.data);
+                      console.log(`[userAudio] Collected chunk: ${event.data.size} bytes (total chunks: ${currentUserAudioChunksRef.current.length})`);
                     }
                   };
-                  userRecorder.start(100); // Collect data every 100ms
+                  // Start recording without timeslice to capture continuous audio
+                  // When stopped, all remaining data will be available in the final dataavailable event
+                  userRecorder.start();
                 }
               }
               
@@ -449,25 +571,152 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
             if (message.serverContent?.turnComplete) {
               // Finalize transcriptions when turn is complete
               if (currentInputTranscription.current) {
-                // Stop recording user audio
+                // Stop recording user audio and wait for all chunks
+                // Keep recording for 3 seconds after turnComplete to capture full audio
+                const processUserAudio = async () => {
                 if (isRecordingUserAudioRef.current && userAudioRecorderRef.current && userAudioRecorderRef.current.state === 'recording') {
-                  userAudioRecorderRef.current.stop();
-                  isRecordingUserAudioRef.current = false;
-                }
-                
-                // Combine user audio chunks
-                let userAudioBlob: Blob | null = null;
+                    return new Promise<Blob | null>((resolve) => {
+                      const recorder = userAudioRecorderRef.current!;
+                      // Use a Set to track chunks we've already added to avoid duplicates
+                      const chunks: Blob[] = [];
+                      const chunkSet = new Set<Blob>();
+                      
+                      // Add all existing chunks
+                      currentUserAudioChunksRef.current.forEach(chunk => {
+                        if (!chunkSet.has(chunk)) {
+                          chunks.push(chunk);
+                          chunkSet.add(chunk);
+                        }
+                      });
+                      
+                      // Create a handler that continuously collects chunks
+                      const continuousDataHandler = (event: BlobEvent) => {
+                        if (event.data.size > 0 && isRecordingUserAudioRef.current) {
+                          // Also update the ref so other handlers can see it
+                          currentUserAudioChunksRef.current.push(event.data);
+                          // Add to our local chunks array if not already there
+                          if (!chunkSet.has(event.data)) {
+                            chunks.push(event.data);
+                            chunkSet.add(event.data);
+                            console.log(`[turnComplete] Collected user audio chunk: ${event.data.size} bytes (total: ${chunks.length} chunks)`);
+                          }
+                        }
+                      };
+                      
+                      // Replace the existing handler temporarily to collect all chunks
+                      const originalHandler = recorder.ondataavailable;
+                      recorder.ondataavailable = continuousDataHandler;
+                      
+                      // Wait a bit longer to ensure we capture the full message audio
+                      // The turnComplete event fires when the user stops speaking, but we want to capture everything
+                      // Increase wait time to ensure we get all audio that might still be buffered
+                      setTimeout(() => {
+                        // Listen for final data chunk
+                        const finalDataHandler = (event: BlobEvent) => {
+                          if (event.data.size > 0) {
+                            if (!chunkSet.has(event.data)) {
+                              chunks.push(event.data);
+                              chunkSet.add(event.data);
+                              console.log(`[turnComplete] Received final user audio chunk: ${event.data.size} bytes (total: ${chunks.length} chunks)`);
+                            }
+                          }
+                        };
+                        
+                        // Listen for stop event to ensure all data is received
+                        const stopHandler = () => {
+                          recorder.removeEventListener('dataavailable', finalDataHandler);
+                          recorder.removeEventListener('stop', stopHandler);
+                          
+                          // Restore original handler
+                          recorder.ondataavailable = originalHandler;
+                          
+                          // Request any remaining data multiple times to ensure we get everything
+                          const requestAllData = () => {
+                            if (recorder.state !== 'inactive') {
+                              try {
+                                recorder.requestData();
+                                console.log(`[turnComplete] Requested data from recorder (state: ${recorder.state})`);
+                              } catch (e) {
+                                console.log('Could not request data, recorder already stopped');
+                              }
+                            }
+                          };
+                          
+                          // Request data multiple times with delays to catch all chunks
+                          requestAllData();
+                          setTimeout(requestAllData, 50);
+                          setTimeout(requestAllData, 150);
+                          setTimeout(requestAllData, 300);
+                          setTimeout(requestAllData, 500);
+                          
+                          // Wait longer to ensure all data chunks are received
+                          setTimeout(() => {
+                            // Get any remaining chunks from the ref that we might have missed
+                            currentUserAudioChunksRef.current.forEach(chunk => {
+                              if (!chunkSet.has(chunk)) {
+                                chunks.push(chunk);
+                                chunkSet.add(chunk);
+                                console.log(`[turnComplete] Added missed chunk: ${chunk.size} bytes`);
+                              }
+                            });
+                            
+                            // Combine all chunks including the final one
+                            let userAudioBlob: Blob | null = null;
+                            if (chunks.length > 0) {
+                              const totalSize = chunks.reduce((sum, chunk) => sum + chunk.size, 0);
+                              console.log(`[turnComplete] Combining ${chunks.length} user audio chunks (total size: ${totalSize} bytes)`);
+                              // Estimate duration: webm at ~12kbps average, so roughly totalSize * 8 / 12000 seconds
+                              const durationEstimate = (totalSize * 8) / 12000;
+                              console.log(`[turnComplete] Estimated audio duration: ${durationEstimate.toFixed(2)}s`);
+                              userAudioBlob = new Blob(chunks, { type: 'audio/webm' });
+                              console.log(`[turnComplete] Created user audio blob: ${userAudioBlob.size} bytes, type: ${userAudioBlob.type}`);
+                            } else {
+                              console.warn(`[turnComplete] No user audio chunks to combine`);
+                            }
+                            
+                            resolve(userAudioBlob);
+                          }, 2000); // Wait 2 seconds after stop to ensure all chunks are received
+                        };
+                        
+                        recorder.addEventListener('dataavailable', finalDataHandler);
+                        recorder.addEventListener('stop', stopHandler);
+                        
+                        // Request data before stopping to get the current chunk
+                        try {
+                          recorder.requestData();
+                          console.log(`[turnComplete] Requested data before stopping recorder`);
+                        } catch (e) {
+                          console.log('Could not request data before stop');
+                        }
+                        
+                        // Stop the recorder - this will trigger the final dataavailable event with all remaining audio
+                        console.log(`[turnComplete] Stopping user audio recorder (state: ${recorder.state})...`);
+                        recorder.stop();
+                        isRecordingUserAudioRef.current = false;
+                        userAudioStopTimeRef.current = Date.now();
+                        console.log(`[turnComplete] Stopped user audio recorder, waiting for final chunks...`);
+                      }, 3000); // Wait 3 seconds after turnComplete to capture full audio (increased to ensure we get everything)
+                    });
+                  } else {
+                    // If not recording, combine existing chunks
                 const userChunkCount = currentUserAudioChunksRef.current.length;
                 if (userChunkCount > 0) {
-                  console.log(`[turnComplete] Combining ${userChunkCount} user audio chunks`);
+                      console.log(`[turnComplete] Combining ${userChunkCount} user audio chunks (recorder was not active)`);
                   const totalSize = currentUserAudioChunksRef.current.reduce((sum, chunk) => sum + chunk.size, 0);
                   console.log(`[turnComplete] Total user audio chunks size: ${totalSize} bytes`);
-                  userAudioBlob = new Blob(currentUserAudioChunksRef.current, { type: 'audio/webm' });
+                      const userAudioBlob = new Blob(currentUserAudioChunksRef.current, { type: 'audio/webm' });
                   console.log(`[turnComplete] Created user audio blob: ${userAudioBlob.size} bytes, type: ${userAudioBlob.type}`);
+                      return Promise.resolve(userAudioBlob);
+                    }
+                    return Promise.resolve<Blob | null>(null);
+                  }
+                };
+                
+                // Wait for user audio to be fully processed
+                const userAudioBlob = await processUserAudio();
+                
+                // Clear chunks after processing
                   currentUserAudioChunksRef.current = [];
-                } else {
-                  console.warn(`[turnComplete] No user audio chunks to combine`);
-                }
                 
                 // Reset recorder for next message
                 userAudioRecorderRef.current = null;
@@ -582,125 +831,38 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
               }
               
               if (currentOutputTranscription.current) {
-                // Combine AI audio chunks
-                let aiAudioBlob: Blob | null = null;
-                const aiChunkCount = currentAiAudioChunksRef.current.length;
-                if (aiChunkCount > 0) {
-                  console.log(`[turnComplete] Combining ${aiChunkCount} AI audio chunks`);
-                  const totalSize = currentAiAudioChunksRef.current.reduce((sum, chunk) => sum + chunk.size, 0);
-                  console.log(`[turnComplete] Total AI audio chunks size: ${totalSize} bytes`);
-                  aiAudioBlob = new Blob(currentAiAudioChunksRef.current, { type: 'audio/wav' });
-                  console.log(`[turnComplete] Created AI audio blob: ${aiAudioBlob.size} bytes, type: ${aiAudioBlob.type}`);
-                  currentAiAudioChunksRef.current = [];
-                } else {
-                  console.warn(`[turnComplete] No AI audio chunks to combine`);
-                }
-                
                 const timestamp = Date.now();
-                let messageIndex: number = transcriptionsRef.current.length;
+                let messageIndex = transcriptionsRef.current.length - 1;
                 
+                // Update transcriptions
                 updateTranscriptions(prev => {
-                  const newTranscriptions = [...prev];
-                  const lastIndex = newTranscriptions.length - 1;
-                  
-                  // Update the last AI message if it exists, otherwise add new one
-                  if (lastIndex >= 0 && newTranscriptions[lastIndex].sender === 'ai') {
-                    messageIndex = lastIndex;
-                    newTranscriptions[lastIndex] = {
-                      ...newTranscriptions[lastIndex],
+                  const copy = [...prev];
+                  if (copy[messageIndex] && copy[messageIndex].sender === 'ai') {
+                    copy[messageIndex] = {
+                      ...copy[messageIndex],
                       text: currentOutputTranscription.current
                     };
                   } else {
-                    messageIndex = newTranscriptions.length;
-                    newTranscriptions.push({
+                    messageIndex = copy.length;
+                    copy.push({
                       text: currentOutputTranscription.current,
                       sender: 'ai',
                       timestamp: timestamp
                     });
                   }
-                  
-                  return newTranscriptions;
+                  return copy;
                 });
                 
-                // Save message to DB immediately and wait for messageId
+                // Save message to DB and get messageId
                 const messageId = await saveMessageToDB(currentOutputTranscription.current, 'ai', timestamp);
                 
                 if (messageId) {
                   messageIdMapRef.current.set(messageIndex, messageId);
                   console.log(`[turnComplete] Saved AI message to DB with messageId: ${messageId} at index ${messageIndex}`);
-                } else {
-                  console.warn(`[turnComplete] Failed to save AI message to DB, messageId is null`);
                 }
                 
-                // Store AI audio for this message
-                if (aiAudioBlob && aiAudioBlob.size > 0) {
-                  console.log(`[turnComplete] AI audio blob ready: ${aiAudioBlob.size} bytes for message ${messageIndex}`);
-                  const audioMap = messageAudioMapRef.current.get(messageIndex) || {};
-                  audioMap.aiAudio = aiAudioBlob;
-                  messageAudioMapRef.current.set(messageIndex, audioMap);
-                  
-                  // Upload AI audio in real-time if sessionId is available
-                  if (sessionIdRef.current) {
-                    console.log(`[turnComplete] Starting upload for AI audio, message ${messageIndex}, sessionId: ${sessionIdRef.current}`);
-                    
-                    // Upload via API route (server-side)
-                    const token = localStorage.getItem('token');
-                    if (token) {
-                      const formData = new FormData();
-                      formData.append('audio', aiAudioBlob, `ai-message-${messageIndex}.wav`);
-                      formData.append('sender', 'ai');
-                      formData.append('messageIndex', messageIndex.toString());
-                      
-                      fetch(`/api/content/sessions/${sessionIdRef.current}/messages/audio`, {
-                        method: 'POST',
-                        headers: {
-                          'Authorization': `Bearer ${token}`
-                        },
-                        body: formData
-                      })
-                        .then(async (response) => {
-                          if (response.ok) {
-                            const result = await response.json();
-                            const audioUrl = result.audioUrl;
-                            if (audioUrl) {
-                              console.log(`[turnComplete] AI audio uploaded successfully for message ${messageIndex}:`, audioUrl);
-                              // Update transcriptions to include audio URL
-                              updateTranscriptions(prev => {
-                                const updated = [...prev];
-                                if (updated[messageIndex] && updated[messageIndex].sender === 'ai') {
-                                  updated[messageIndex] = {
-                                    ...updated[messageIndex],
-                                    audioUrl: audioUrl
-                                  };
-                                }
-                                return updated;
-                              });
-                              // Update message in DB using messageId if available
-                              if (messageId) {
-                                updateMessageAudioInDB(sessionIdRef.current!, messageId, audioUrl);
-                              } else {
-                                console.warn(`[turnComplete] No messageId available for message ${messageIndex}, cannot update audio URL in DB`);
-                              }
-                            } else {
-                              console.warn(`[turnComplete] AI audio upload returned null for message ${messageIndex}`);
-                            }
-                          } else {
-                            const errorText = await response.text();
-                            console.error(`[turnComplete] Failed to upload AI audio for message ${messageIndex}:`, response.status, errorText);
-                          }
-                        })
-                        .catch(err => {
-                          console.error(`[turnComplete] Error uploading AI audio for message ${messageIndex}:`, err);
-                        });
-                    } else {
-                      console.warn(`[turnComplete] No auth token available, cannot upload AI audio for message ${messageIndex}`);
-                    }
-                  } else {
-                    console.warn(`[turnComplete] No sessionId available, cannot upload AI audio for message ${messageIndex}`);
-                  }
-                } else {
-                  console.warn(`[turnComplete] AI audio blob is empty or null for message ${messageIndex}`);
-                }
+                // Finalize AI audio (clean pipeline)
+                await finalizeAiAudio(messageIndex, messageId);
                 
                 currentOutputTranscription.current = '';
                 
@@ -716,10 +878,13 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
 
             // 3. INTERRUPTION LOGIC
             if (message.serverContent?.interrupted) {
+              aiSourcesRef.current.forEach(s => { try { s.stop(); } catch(e) {} });
+              aiSourcesRef.current.clear();
               sourcesRef.current.forEach(s => { try { s.stop(); } catch(e) {} });
               sourcesRef.current.clear();
               nextStartTimeRef.current = outputAudioContextRef.current?.currentTime || 0;
               processingQueueRef.current = Promise.resolve(); // Clear queue
+              aiProcessingQueueRef.current = Promise.resolve(); // Clear AI queue
               setIsAiSpeaking(false);
             }
           },
@@ -1270,7 +1435,15 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
     wasMicEnabledBeforePause.current = micInputEnabledRef.current;
     // Temporarily disable mic input
     micInputEnabledRef.current = false;
-    // Stop all playing audio
+    // Stop all playing audio (both old and new pipeline)
+    aiSourcesRef.current.forEach(s => {
+      try {
+        s.stop();
+      } catch (e) {
+        // Ignore errors
+      }
+    });
+    aiSourcesRef.current.clear();
     sourcesRef.current.forEach(s => {
       try {
         s.stop();
@@ -1310,8 +1483,16 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
       console.error('Error closing session:', err);
     }
 
-    // Stop all audio sources
+    // Stop all audio sources (both old and new pipeline)
     try {
+      aiSourcesRef.current.forEach(s => {
+        try {
+          s.stop();
+        } catch (e) {
+          // Ignore errors
+        }
+      });
+      aiSourcesRef.current.clear();
       sourcesRef.current.forEach(s => {
         try {
           s.stop();

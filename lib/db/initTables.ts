@@ -200,6 +200,38 @@ export const initContentTables = async () => {
       console.log('Message audio URL column check:', error.message);
     }
 
+    // Add detected_language column if it doesn't exist
+    try {
+      const columnCheck = await query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'conversation_messages' AND column_name = 'detected_language'
+      `);
+      
+      if (columnCheck.rows.length === 0) {
+        await query('ALTER TABLE conversation_messages ADD COLUMN detected_language VARCHAR(10)');
+        console.log('✓ Added detected_language column to conversation_messages table');
+      }
+    } catch (error: any) {
+      console.log('Detected language column check:', error.message);
+    }
+
+    // Add is_flagged column if it doesn't exist
+    try {
+      const columnCheck = await query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'conversation_messages' AND column_name = 'is_flagged'
+      `);
+      
+      if (columnCheck.rows.length === 0) {
+        await query('ALTER TABLE conversation_messages ADD COLUMN is_flagged BOOLEAN DEFAULT false');
+        console.log('✓ Added is_flagged column to conversation_messages table');
+      }
+    } catch (error: any) {
+      console.log('Is flagged column check:', error.message);
+    }
+
     console.log('Content tables initialized');
   } catch (error) {
     console.error('Error initializing content tables:', error);
