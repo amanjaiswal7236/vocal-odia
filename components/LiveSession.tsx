@@ -74,6 +74,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
   const [isWaitingForAiGreeting, setIsWaitingForAiGreeting] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false); // Use ref to avoid stale closures in callbacks
+  const [isSaving, setIsSaving] = useState(false); // Track saving state to prevent multiple clicks
   const descriptionAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const descriptionSpeechSynthesisRef = useRef<SpeechSynthesisUtterance | null>(null);
   const hasSpokenDescriptionRef = useRef(false);
@@ -128,6 +129,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
 
   // Data Tracking
   const currentInputTranscription = useRef('');
+  const currentUserMessageIndexRef = useRef<number | null>(null); // Track the index of the current user message being built
   const currentOutputTranscription = useRef('');
   const totalCharsTracked = useRef(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -548,21 +550,33 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
               // Update transcriptions in real-time for user speech
               updateTranscriptions(prev => {
                 const newTranscriptions = [...prev];
-                const lastIndex = newTranscriptions.length - 1;
                 
-                // If last item is a user message, update it (real-time transcription)
-                if (lastIndex >= 0 && newTranscriptions[lastIndex].sender === 'user') {
-                  newTranscriptions[lastIndex] = {
-                    ...newTranscriptions[lastIndex],
+                // If we have a tracked user message index, update that one
+                if (currentUserMessageIndexRef.current !== null && 
+                    currentUserMessageIndexRef.current < newTranscriptions.length &&
+                    newTranscriptions[currentUserMessageIndexRef.current].sender === 'user') {
+                  newTranscriptions[currentUserMessageIndexRef.current] = {
+                    ...newTranscriptions[currentUserMessageIndexRef.current],
                     text: currentInputTranscription.current
                   };
                 } else {
-                  // Add new user transcription item
-                  newTranscriptions.push({
-                    text: currentInputTranscription.current,
-                    sender: 'user',
-                    timestamp: Date.now()
-                  });
+                  // Check if last item is a user message, update it (real-time transcription)
+                  const lastIndex = newTranscriptions.length - 1;
+                  if (lastIndex >= 0 && newTranscriptions[lastIndex].sender === 'user') {
+                    currentUserMessageIndexRef.current = lastIndex;
+                    newTranscriptions[lastIndex] = {
+                      ...newTranscriptions[lastIndex],
+                      text: currentInputTranscription.current
+                    };
+                  } else {
+                    // Add new user transcription item
+                    currentUserMessageIndexRef.current = newTranscriptions.length;
+                    newTranscriptions.push({
+                      text: currentInputTranscription.current,
+                      sender: 'user',
+                      timestamp: Date.now()
+                    });
+                  }
                 }
                 return newTranscriptions;
               });
@@ -726,22 +740,43 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
                 
                 updateTranscriptions(prev => {
                   const newTranscriptions = [...prev];
-                  const lastIndex = newTranscriptions.length - 1;
                   
-                  // Update the last user message if it exists, otherwise add new one
-                  if (lastIndex >= 0 && newTranscriptions[lastIndex].sender === 'user') {
-                    messageIndex = lastIndex;
-                    newTranscriptions[lastIndex] = {
-                      ...newTranscriptions[lastIndex],
+                  // Use the tracked index if available, otherwise search for the user message
+                  if (currentUserMessageIndexRef.current !== null && 
+                      currentUserMessageIndexRef.current < newTranscriptions.length &&
+                      newTranscriptions[currentUserMessageIndexRef.current].sender === 'user') {
+                    messageIndex = currentUserMessageIndexRef.current;
+                    newTranscriptions[messageIndex] = {
+                      ...newTranscriptions[messageIndex],
                       text: currentInputTranscription.current
                     };
                   } else {
-                    messageIndex = newTranscriptions.length;
-                    newTranscriptions.push({
-                      text: currentInputTranscription.current,
-                      sender: 'user',
-                      timestamp: timestamp
-                    });
+                    // Search backwards for the most recent user message
+                    let foundIndex = -1;
+                    for (let i = newTranscriptions.length - 1; i >= 0; i--) {
+                      if (newTranscriptions[i].sender === 'user') {
+                        foundIndex = i;
+                        break;
+                      }
+                    }
+                    
+                    if (foundIndex >= 0) {
+                      messageIndex = foundIndex;
+                      newTranscriptions[foundIndex] = {
+                        ...newTranscriptions[foundIndex],
+                        text: currentInputTranscription.current
+                      };
+                      currentUserMessageIndexRef.current = foundIndex;
+                    } else {
+                      // No user message found, add new one (shouldn't happen, but safety check)
+                      messageIndex = newTranscriptions.length;
+                      currentUserMessageIndexRef.current = messageIndex;
+                      newTranscriptions.push({
+                        text: currentInputTranscription.current,
+                        sender: 'user',
+                        timestamp: timestamp
+                      });
+                    }
                   }
                   
                   return newTranscriptions;
@@ -828,6 +863,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
                 }
                 
                 currentInputTranscription.current = '';
+                currentUserMessageIndexRef.current = null; // Reset after processing
               }
               
               if (currentOutputTranscription.current) {
@@ -1751,19 +1787,35 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
         </div>
         <div className="flex items-center gap-3">
           {isPaused ? (
-            <button onClick={handleResume} className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors flex items-center gap-2 px-4">
+            <button 
+              onClick={handleResume} 
+              disabled={isSaving}
+              className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors flex items-center gap-2 px-4 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               <span className="text-xs font-bold uppercase">Resume</span>
               <i className="fas fa-play"></i>
             </button>
           ) : (
-            <button onClick={handlePause} className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors flex items-center gap-2 px-4">
+            <button 
+              onClick={handlePause} 
+              disabled={isSaving}
+              className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors flex items-center gap-2 px-4 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               <span className="text-xs font-bold uppercase">Pause</span>
               <i className="fas fa-pause"></i>
             </button>
           )}
-          <button onClick={handleEnd} className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors flex items-center gap-2 px-4">
-            <span className="text-xs font-bold uppercase">Finish</span>
-            <i className="fas fa-check"></i>
+          <button 
+            onClick={handleEnd} 
+            disabled={isSaving}
+            className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors flex items-center gap-2 px-4 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <span className="text-xs font-bold uppercase">{isSaving ? 'Saving...' : 'Finish'}</span>
+            {isSaving ? (
+              <i className="fas fa-spinner fa-spin"></i>
+            ) : (
+              <i className="fas fa-check"></i>
+            )}
           </button>
         </div>
       </div>
@@ -1836,7 +1888,8 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
           </div>
         </div>
         <p className="text-gray-500 text-sm font-medium italic">
-          {isPaused ? "Conversation paused. Click Resume to continue." :
+          {isSaving ? "Wrapping up and saving progress..." :
+           isPaused ? "Conversation paused. Click Resume to continue." :
            !isReady ? "Connecting..." : 
            isWaitingForAiGreeting ? `${AI_AGENT.NAME} is introducing the scenario...` :
            isAiSpeaking ? `${AI_AGENT.NAME} is speaking...` : 

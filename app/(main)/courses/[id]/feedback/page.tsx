@@ -10,11 +10,12 @@ import { CourseFeedback, Course } from '@/types';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { useToast } from '@/components/Toast';
 import { getErrorMessage } from '@/lib/utils/errorHandler';
+import { contentService } from '@/lib/services/contentService';
 
 export default function CourseFeedbackPage() {
   const router = useRouter();
   const params = useParams();
-  const { courses, setCourses, loading } = useAppContext();
+  const { courses, setCourses, loading, refreshContent, currentUser } = useAppContext();
   const { showToast } = useToast();
   const [feedback, setFeedback] = useState<CourseFeedback | null>(null);
   const [generating, setGenerating] = useState(true);
@@ -47,7 +48,7 @@ export default function CourseFeedbackPage() {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
           model: 'gemini-2.0-flash-exp',
-          contents: `Generate feedback JSON for Odia learner completing ${course.title}.`,
+          contents: `Generate feedback JSON for Odia learner completing ${course.title}. Provide encouraging, constructive feedback.`,
           config: {
             responseMimeType: "application/json",
             responseSchema: {
@@ -62,13 +63,43 @@ export default function CourseFeedbackPage() {
             }
           }
         });
-        setFeedback({ ...JSON.parse(response.text || '{}'), courseId });
+        
+        const responseText = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+        let feedbackData: any = {};
+        
+        try {
+          feedbackData = JSON.parse(responseText);
+        } catch (parseError) {
+          // Try to extract JSON from markdown code blocks
+          let jsonText = responseText.trim();
+          if (jsonText.startsWith('```json')) {
+            jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+          } else if (jsonText.startsWith('```')) {
+            jsonText = jsonText.replace(/```\n?/g, '').trim();
+          }
+          try {
+            feedbackData = JSON.parse(jsonText);
+          } catch (e) {
+            console.error('Failed to parse feedback response:', e);
+            throw new Error('Invalid feedback response format');
+          }
+        }
+        
+        // Validate required fields
+        if (!feedbackData.summary || !feedbackData.strengths || !feedbackData.improvementAreas || !feedbackData.nextSteps) {
+          throw new Error('Feedback response missing required fields');
+        }
+        
+        setFeedback({ ...feedbackData, courseId });
         showToast('Feedback generated successfully!', 'success');
-      } catch (e) {
+      } catch (e: any) {
         const errorMessage = getErrorMessage(e);
         console.error('Error generating feedback:', e);
-        showToast('Failed to generate feedback. Please try again.', 'error');
-        router.push('/courses');
+        showToast(`Failed to generate feedback: ${errorMessage}. Please try again.`, 'error');
+        // Don't redirect immediately - let user see the error
+        setTimeout(() => {
+          router.push('/courses');
+        }, 3000);
       } finally {
         setGenerating(false);
       }
@@ -89,10 +120,29 @@ export default function CourseFeedbackPage() {
 
   const course = courses.find(c => c.id === feedback.courseId);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
+    // Find courses that have this course as prerequisite
+    const nextCourses = courses.filter(c => c.prerequisiteId === feedback.courseId);
+    
+    // Unlock next courses in database
+    for (const nextCourse of nextCourses) {
+      try {
+        await contentService.unlockCourse(parseInt(nextCourse.id));
+      } catch (err) {
+        console.error(`Failed to unlock course ${nextCourse.id}:`, err);
+      }
+    }
+    
+    // Update local state
     setCourses((prev: Course[]) => prev.map(c => 
       c.prerequisiteId === feedback.courseId ? { ...c, isUnlocked: true } : c
     ));
+    
+    // Refresh content to get updated course states
+    if (currentUser) {
+      refreshContent(parseInt(currentUser.id));
+    }
+    
     router.push('/courses');
   };
 

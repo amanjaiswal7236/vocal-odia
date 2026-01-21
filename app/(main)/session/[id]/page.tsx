@@ -122,6 +122,8 @@ export default function SessionPage() {
   const handleEnd = async (estimatedTokens?: number, transcriptions?: any[], sessionAudioUrl?: string | null, sessionId?: number | null) => {
     const durationSeconds = Math.floor((Date.now() - sessionStartTime) / 1000);
     
+    // Show loading state (handled by LiveSession component)
+    
     // Update session with final data (session should already exist from early creation)
     if (currentUser && scenario) {
       try {
@@ -206,43 +208,52 @@ export default function SessionPage() {
     }
 
     if (scenario?.isCourseLesson && activeCourseId) {
-      // Mark lesson as completed
-      setCourses(prev => prev.map(c => {
-        if (c.id === activeCourseId) {
-          const updatedModules = c.modules.map(m => ({
-            ...m,
-            lessons: m.lessons.map(l => 
-              l.id === scenario.id ? { ...l, completed: true } : l
-            )
-          }));
-          return { ...c, modules: updatedModules };
-        }
-        return c;
-      }));
+      try {
+        // Mark lesson as completed in database
+        await contentService.completeLesson(parseInt(scenario.id));
+        
+        // Update local state
+        setCourses(prev => prev.map(c => {
+          if (c.id === activeCourseId) {
+            const updatedModules = c.modules.map(m => ({
+              ...m,
+              lessons: m.lessons.map(l => 
+                l.id === scenario.id ? { ...l, completed: true } : l
+              )
+            }));
+            return { ...c, modules: updatedModules };
+          }
+          return c;
+        }));
 
-      // Check if course is complete
-      const course = courses.find(c => c.id === activeCourseId);
-      if (course) {
-        const updatedCourse = {
-          ...course,
-          modules: course.modules.map(m => ({
-            ...m,
-            lessons: m.lessons.map(l => 
-              l.id === scenario.id ? { ...l, completed: true } : l
-            )
-          }))
-        };
-        
-        const allCompleted = updatedCourse.modules.every(m => 
-          m.lessons.every(l => l.completed)
-        );
-        
-        if (allCompleted) {
-          router.push(`/courses/${activeCourseId}/feedback`);
+        // Check if course is complete
+        const course = courses.find(c => c.id === activeCourseId);
+        if (course) {
+          const updatedCourse = {
+            ...course,
+            modules: course.modules.map(m => ({
+              ...m,
+              lessons: m.lessons.map(l => 
+                l.id === scenario.id ? { ...l, completed: true } : l
+              )
+            }))
+          };
+          
+          const allCompleted = updatedCourse.modules.every(m => 
+            m.lessons.every(l => l.completed)
+          );
+          
+          if (allCompleted) {
+            router.push(`/courses/${activeCourseId}/feedback`);
+          } else {
+            router.push('/courses');
+          }
         } else {
           router.push('/courses');
         }
-      } else {
+      } catch (err) {
+        console.error('Error completing lesson:', err);
+        // Still navigate even if lesson completion fails
         router.push('/courses');
       }
     } else {

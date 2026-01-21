@@ -356,6 +356,28 @@ export const contentService = {
     } catch (error) {
       throw new AppError('Failed to load session messages. Please try again.', 'FETCH_SESSION_MESSAGES_ERROR');
     }
-  }
+  },
+
+  async completeLesson(lessonId: number) {
+    try {
+      const response = await fetchWithAuth(`${API_URL}/content/lessons/${lessonId}/complete`, {
+        method: 'POST',
+      });
+      return response.json();
+    } catch (error) {
+      throw new AppError('Failed to mark lesson as completed. Please try again.', 'COMPLETE_LESSON_ERROR');
+    }
+  },
+
+  async unlockCourse(courseId: number) {
+    try {
+      const response = await fetchWithAuth(`${API_URL}/content/courses/${courseId}/unlock`, {
+        method: 'POST',
+      });
+      return response.json();
+    } catch (error) {
+      throw new AppError('Failed to unlock course. Please try again.', 'UNLOCK_COURSE_ERROR');
+    }
+  },
 };
 
