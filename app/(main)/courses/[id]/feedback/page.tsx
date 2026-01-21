@@ -139,9 +139,7 @@ export default function CourseFeedbackPage() {
     ));
     
     // Refresh content to get updated course states
-    if (currentUser) {
-      refreshContent(parseInt(currentUser.id));
-    }
+    refreshContent();
     
     router.push('/courses');
   };
