@@ -41,7 +41,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Scenarios State
   const [isAddingScenario, setIsAddingScenario] = useState(false);
   const [editingScenario, setEditingScenario] = useState<Scenario | null>(null);
-  const [newScenario, setNewScenario] = useState({ title: '', description: '', icon: 'fa-comments', prompt: '', image: '' });
+  const [newScenario, setNewScenario] = useState({ 
+    title: '', 
+    description: '', 
+    icon: 'fa-comments', 
+    prompt: '', 
+    image: '',
+    temperature: undefined as number | undefined,
+    topP: undefined as number | undefined,
+    topK: undefined as number | undefined,
+    maxOutputTokens: undefined as number | undefined
+  });
+  const [showHyperparameters, setShowHyperparameters] = useState(false);
 
   // Courses State
   const [isAddingCourse, setIsAddingCourse] = useState(false);
@@ -72,7 +83,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onUpdateScenarios([...scenarios, { ...created, id: created.id.toString(), image: created.image || undefined }]);
       }
       setIsAddingScenario(false);
-      setNewScenario({ title: '', description: '', icon: 'fa-comments', prompt: '', image: '' });
+      setNewScenario({ 
+        title: '', 
+        description: '', 
+        icon: 'fa-comments', 
+        prompt: '', 
+        image: '',
+        temperature: undefined,
+        topP: undefined,
+        topK: undefined,
+        maxOutputTokens: undefined
+      });
+      setShowHyperparameters(false);
     } catch (error) {
       console.error('Failed to save scenario:', error);
       alert('Failed to save scenario');
@@ -86,8 +108,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       description: scenario.description,
       icon: scenario.icon,
       prompt: scenario.prompt,
-      image: scenario.image || ''
+      image: scenario.image || '',
+      temperature: scenario.temperature,
+      topP: scenario.topP,
+      topK: scenario.topK,
+      maxOutputTokens: scenario.maxOutputTokens
     });
+    setShowHyperparameters(!!(scenario.temperature || scenario.topP || scenario.topK || scenario.maxOutputTokens));
     setIsAddingScenario(true);
   };
 
@@ -855,7 +882,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                     <button onClick={() => {
                       setEditingScenario(null);
-                      setNewScenario({ title: '', description: '', icon: 'fa-comments', prompt: '', image: '' });
+                      setNewScenario({ 
+                        title: '', 
+                        description: '', 
+                        icon: 'fa-comments', 
+                        prompt: '', 
+                        image: '',
+                        temperature: undefined,
+                        topP: undefined,
+                        topK: undefined,
+                        maxOutputTokens: undefined
+                      });
+                      setShowHyperparameters(false);
                       setIsAddingScenario(true);
                     }} className="bg-green-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md hover:bg-green-600 transition-all flex items-center gap-2 active:scale-95">
                       <i className="fas fa-plus"></i> Add New Scenario
@@ -907,7 +945,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <button onClick={() => {
                       setIsAddingScenario(false);
                       setEditingScenario(null);
-                      setNewScenario({ title: '', description: '', icon: 'fa-comments', prompt: '', image: '' });
+                      setNewScenario({ 
+                        title: '', 
+                        description: '', 
+                        icon: 'fa-comments', 
+                        prompt: '', 
+                        image: '',
+                        temperature: undefined,
+                        topP: undefined,
+                        topK: undefined,
+                        maxOutputTokens: undefined
+                      });
+                      setShowHyperparameters(false);
                     }} className="text-slate-200 hover:text-white transition-colors"><i className="fas fa-arrow-left"></i></button>
                     <h3 className="font-bold text-xl">{editingScenario ? 'Edit Scenario' : 'Configure New Scenario'}</h3>
                   </div>
@@ -936,6 +985,107 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <input type="url" value={newScenario.image} onChange={e => setNewScenario({...newScenario, image: e.target.value})} placeholder="https://example.com/image.jpg" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 transition-all font-medium" />
                     <p className="text-xs text-gray-400 mt-1">Provide an image URL that represents this scenario</p>
                   </div>
+                  
+                  {/* Hyperparameters Section */}
+                  <div className="border-t border-gray-200 pt-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <label className="block text-xs font-black text-gray-400 uppercase">Model Hyperparameters (Optional)</label>
+                      <button
+                        type="button"
+                        onClick={() => setShowHyperparameters(!showHyperparameters)}
+                        className="text-sm text-green-600 hover:text-green-700 font-medium"
+                      >
+                        {showHyperparameters ? 'Hide' : 'Show'} Advanced Settings
+                      </button>
+                    </div>
+                    
+                    {showHyperparameters && (
+                      <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-xl">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Temperature: {newScenario.temperature !== undefined ? newScenario.temperature.toFixed(2) : '0.70 (default)'}
+                          </label>
+                          <input
+                            type="range"
+                            min="0"
+                            max="2"
+                            step="0.1"
+                            value={newScenario.temperature ?? 0.7}
+                            onChange={(e) => setNewScenario({...newScenario, temperature: parseFloat(e.target.value)})}
+                            className="w-full"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Lower = more deterministic</p>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Top P: {newScenario.topP !== undefined ? newScenario.topP.toFixed(2) : '0.95 (default)'}
+                          </label>
+                          <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            value={newScenario.topP ?? 0.95}
+                            onChange={(e) => setNewScenario({...newScenario, topP: parseFloat(e.target.value)})}
+                            className="w-full"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Lower = more focused</p>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Top K: {newScenario.topK ?? '40 (default)'}
+                          </label>
+                          <input
+                            type="range"
+                            min="1"
+                            max="100"
+                            step="1"
+                            value={newScenario.topK ?? 40}
+                            onChange={(e) => setNewScenario({...newScenario, topK: parseInt(e.target.value)})}
+                            className="w-full"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Lower = more deterministic</p>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Max Output Tokens: {newScenario.maxOutputTokens ?? '8192 (default)'}
+                          </label>
+                          <input
+                            type="range"
+                            min="256"
+                            max="8192"
+                            step="256"
+                            value={newScenario.maxOutputTokens ?? 8192}
+                            onChange={(e) => setNewScenario({...newScenario, maxOutputTokens: parseInt(e.target.value)})}
+                            className="w-full"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Response length limit</p>
+                        </div>
+                        
+                        <div className="col-span-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewScenario({
+                                ...newScenario,
+                                temperature: undefined,
+                                topP: undefined,
+                                topK: undefined,
+                                maxOutputTokens: undefined
+                              });
+                            }}
+                            className="text-xs text-gray-600 hover:text-gray-800 underline"
+                          >
+                            Reset to defaults
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
                   <button type="submit" className="w-full bg-green-600 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-green-700 transition-all active:scale-95">
                     {editingScenario ? 'Update Scenario' : 'Save Scenario'}
                   </button>

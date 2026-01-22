@@ -32,6 +32,32 @@ export const initContentTables = async () => {
       console.log('Image column check:', error.message);
     }
 
+    // Add hyperparameter columns if they don't exist (for existing databases)
+    const hyperparameterColumns = [
+      { name: 'temperature', type: 'REAL' },
+      { name: 'top_p', type: 'REAL' },
+      { name: 'top_k', type: 'INTEGER' },
+      { name: 'max_output_tokens', type: 'INTEGER' }
+    ];
+
+    for (const col of hyperparameterColumns) {
+      try {
+        const columnCheck = await query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'scenarios' AND column_name = $1
+        `, [col.name]);
+        
+        if (columnCheck.rows.length === 0) {
+          await query(`ALTER TABLE scenarios ADD COLUMN ${col.name} ${col.type}`);
+          console.log(`✓ Added ${col.name} column to scenarios table`);
+        }
+      } catch (error: any) {
+        // Column might already exist or table doesn't exist yet
+        console.log(`${col.name} column check:`, error.message);
+      }
+    }
+
     // Courses table
     await query(`
       CREATE TABLE IF NOT EXISTS courses (

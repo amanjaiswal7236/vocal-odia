@@ -8,31 +8,51 @@ export async function PUT(
 ) {
   try {
     requireAdmin(req);
-    const { title, description, icon, prompt, image } = await req.json();
+    const { title, description, icon, prompt, image, temperature, topP, topK, maxOutputTokens } = await req.json();
     const { id } = await params;
     
-    // Check if image column exists, if not add it
-    try {
-      const columnCheck = await query(`
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = 'scenarios' AND column_name = 'image'
-      `);
-      
-      if (columnCheck.rows.length === 0) {
-        await query('ALTER TABLE scenarios ADD COLUMN image TEXT');
-      }
-    } catch (migrationError) {
-      // Ignore migration errors, try to update anyway
-      console.log('Migration check:', migrationError);
+    // Build dynamic update query
+    const updates = ['title = $1', 'description = $2', 'icon = $3', 'prompt = $4', 'updated_at = CURRENT_TIMESTAMP'];
+    const values = [title, description, icon, prompt];
+    let paramIndex = 5;
+    
+    // Add optional columns
+    if (image !== undefined) {
+      updates.push(`image = $${paramIndex++}`);
+      values.push(image || null);
     }
     
-    // Try with image column first
+    if (temperature !== undefined) {
+      updates.push(`temperature = $${paramIndex++}`);
+      values.push(temperature);
+    }
+    
+    if (topP !== undefined) {
+      updates.push(`top_p = $${paramIndex++}`);
+      values.push(topP);
+    }
+    
+    if (topK !== undefined) {
+      updates.push(`top_k = $${paramIndex++}`);
+      values.push(topK);
+    }
+    
+    if (maxOutputTokens !== undefined) {
+      updates.push(`max_output_tokens = $${paramIndex++}`);
+      values.push(maxOutputTokens);
+    }
+    
+    values.push(id); // Add id for WHERE clause
+    
+    const queryText = `
+      UPDATE scenarios 
+      SET ${updates.join(', ')} 
+      WHERE id = $${paramIndex} 
+      RETURNING *
+    `;
+    
     try {
-      const result = await query(
-        'UPDATE scenarios SET title = $1, description = $2, icon = $3, prompt = $4, image = $5, updated_at = CURRENT_TIMESTAMP WHERE id = $6 RETURNING *',
-        [title, description, icon, prompt, image || null, id]
-      );
+      const result = await query(queryText, values);
       
       if (result.rows.length === 0) {
         return NextResponse.json(
@@ -43,23 +63,21 @@ export async function PUT(
       
       return NextResponse.json(result.rows[0]);
     } catch (updateError: any) {
-      // If image column doesn't exist, update without it
-      if (updateError.message?.includes('column "image"')) {
-        const result = await query(
-          'UPDATE scenarios SET title = $1, description = $2, icon = $3, prompt = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5 RETURNING *',
-          [title, description, icon, prompt, id]
+      // Fallback to basic update if columns don't exist
+      console.error('Update error:', updateError);
+      const basicResult = await query(
+        'UPDATE scenarios SET title = $1, description = $2, icon = $3, prompt = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5 RETURNING *',
+        [title, description, icon, prompt, id]
+      );
+      
+      if (basicResult.rows.length === 0) {
+        return NextResponse.json(
+          { error: 'Scenario not found' },
+          { status: 404 }
         );
-        
-        if (result.rows.length === 0) {
-          return NextResponse.json(
-            { error: 'Scenario not found' },
-            { status: 404 }
-          );
-        }
-        
-        return NextResponse.json(result.rows[0]);
       }
-      throw updateError;
+      
+      return NextResponse.json(basicResult.rows[0]);
     }
   } catch (error: any) {
     if (error.message === 'Unauthorized' || error.message === 'Admin access required') {

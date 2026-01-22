@@ -29,6 +29,10 @@ export interface Scenario {
   prompt: string;
   image?: string;
   isCourseLesson?: boolean;
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  maxOutputTokens?: number;
 }
 
 export interface ShadowingTask {

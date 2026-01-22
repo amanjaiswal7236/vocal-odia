@@ -79,7 +79,11 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         setScenarios(scenariosData.value.map((s: any) => ({ 
           ...s, 
           id: s.id.toString(),
-          image: s.image || undefined
+          image: s.image || undefined,
+          temperature: s.temperature ?? undefined,
+          topP: s.top_p ?? undefined,
+          topK: s.top_k ?? undefined,
+          maxOutputTokens: s.max_output_tokens ?? undefined
         })));
       } else {
         console.error('Failed to load scenarios:', scenariosData.reason);

@@ -75,6 +75,13 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false); // Use ref to avoid stale closures in callbacks
   const [isSaving, setIsSaving] = useState(false); // Track saving state to prevent multiple clicks
+  
+  // Hyperparameters state
+  const [showSettings, setShowSettings] = useState(false);
+  const [temperature, setTemperature] = useState<number>(0.7);
+  const [topP, setTopP] = useState<number>(0.95);
+  const [topK, setTopK] = useState<number>(40);
+  const [maxOutputTokens, setMaxOutputTokens] = useState<number>(8192);
   const descriptionAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const descriptionSpeechSynthesisRef = useRef<SpeechSynthesisUtterance | null>(null);
   const hasSpokenDescriptionRef = useRef(false);
@@ -940,7 +947,14 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'aoede' } }
           },
           inputAudioTranscription: {},
-          outputAudioTranscription: {}
+          outputAudioTranscription: {},
+          // Hyperparameters: use scenario-specific values if available, otherwise use state values
+          generationConfig: {
+            temperature: scenario.temperature ?? temperature,
+            topP: scenario.topP ?? topP,
+            topK: scenario.topK ?? topK,
+            maxOutputTokens: scenario.maxOutputTokens ?? maxOutputTokens
+          }
         }
       });
 
@@ -1655,7 +1669,117 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
             </span>
             <h2 className="text-xl font-bold">{scenario.title}</h2>
           </div>
+          <button 
+            onClick={() => setShowSettings(!showSettings)} 
+            className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors flex items-center gap-2 px-4"
+            title="Model Settings"
+          >
+            <span className="text-xs font-bold uppercase">Settings</span>
+            <i className={`fas fa-cog ${showSettings ? 'fa-spin' : ''}`}></i>
+          </button>
         </div>
+        
+        {/* Settings Panel */}
+        {showSettings && (
+          <div className="mx-6 mt-4 bg-white border border-gray-200 rounded-lg shadow-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Model Hyperparameters</h3>
+              <button 
+                onClick={() => setShowSettings(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Temperature */}
+              <div className="space-y-2">
+                <label className="flex items-center justify-between text-sm font-medium text-gray-700">
+                  <span>Temperature</span>
+                  <span className="text-gray-500">{temperature.toFixed(2)}</span>
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  value={temperature}
+                  onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
+                />
+                <p className="text-xs text-gray-500">Lower values (0.1-0.5) = more deterministic, Higher values (1.0-2.0) = more creative</p>
+              </div>
+              
+              {/* Top P */}
+              <div className="space-y-2">
+                <label className="flex items-center justify-between text-sm font-medium text-gray-700">
+                  <span>Top P (Nucleus Sampling)</span>
+                  <span className="text-gray-500">{topP.toFixed(2)}</span>
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={topP}
+                  onChange={(e) => setTopP(parseFloat(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
+                />
+                <p className="text-xs text-gray-500">Lower values (0.1-0.5) = more focused, Higher values (0.9-1.0) = more diverse</p>
+              </div>
+              
+              {/* Top K */}
+              <div className="space-y-2">
+                <label className="flex items-center justify-between text-sm font-medium text-gray-700">
+                  <span>Top K</span>
+                  <span className="text-gray-500">{topK}</span>
+                </label>
+                <input
+                  type="range"
+                  min="1"
+                  max="100"
+                  step="1"
+                  value={topK}
+                  onChange={(e) => setTopK(parseInt(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
+                />
+                <p className="text-xs text-gray-500">Number of top tokens to consider. Lower = more deterministic</p>
+              </div>
+              
+              {/* Max Output Tokens */}
+              <div className="space-y-2">
+                <label className="flex items-center justify-between text-sm font-medium text-gray-700">
+                  <span>Max Output Tokens</span>
+                  <span className="text-gray-500">{maxOutputTokens}</span>
+                </label>
+                <input
+                  type="range"
+                  min="256"
+                  max="8192"
+                  step="256"
+                  value={maxOutputTokens}
+                  onChange={(e) => setMaxOutputTokens(parseInt(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
+                />
+                <p className="text-xs text-gray-500">Maximum length of AI responses</p>
+              </div>
+            </div>
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setTemperature(0.1);
+                  setTopP(0.3);
+                  setTopK(10);
+                  setMaxOutputTokens(8192);
+                }}
+                className="text-sm text-green-600 hover:text-green-700 font-medium"
+              >
+                <i className="fas fa-undo mr-2"></i>
+                Reset to Low Temperature (More Deterministic)
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Image and Description */}
         <div className="flex-1 overflow-y-auto p-8 flex flex-col items-center justify-center gap-8 bg-gradient-to-br from-gray-50 to-white">
@@ -1786,6 +1910,14 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
           <h2 className="text-xl font-bold">{scenario.title}</h2>
         </div>
         <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setShowSettings(!showSettings)} 
+            className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors flex items-center gap-2 px-4"
+            title="Model Settings"
+          >
+            <span className="text-xs font-bold uppercase">Settings</span>
+            <i className={`fas fa-cog ${showSettings ? 'fa-spin' : ''}`}></i>
+          </button>
           {isPaused ? (
             <button 
               onClick={handleResume} 
@@ -1819,6 +1951,108 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
           </button>
         </div>
       </div>
+      
+      {/* Settings Panel */}
+      {showSettings && (
+        <div className="mx-6 mt-4 bg-white border border-gray-200 rounded-lg shadow-lg p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-900">Model Hyperparameters</h3>
+            <button 
+              onClick={() => setShowSettings(false)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <i className="fas fa-times"></i>
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Temperature */}
+            <div className="space-y-2">
+              <label className="flex items-center justify-between text-sm font-medium text-gray-700">
+                <span>Temperature</span>
+                <span className="text-gray-500">{temperature.toFixed(2)}</span>
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="2"
+                step="0.1"
+                value={temperature}
+                onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
+              />
+              <p className="text-xs text-gray-500">Lower values (0.1-0.5) = more deterministic, Higher values (1.0-2.0) = more creative</p>
+            </div>
+            
+            {/* Top P */}
+            <div className="space-y-2">
+              <label className="flex items-center justify-between text-sm font-medium text-gray-700">
+                <span>Top P (Nucleus Sampling)</span>
+                <span className="text-gray-500">{topP.toFixed(2)}</span>
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={topP}
+                onChange={(e) => setTopP(parseFloat(e.target.value))}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
+              />
+              <p className="text-xs text-gray-500">Lower values (0.1-0.5) = more focused, Higher values (0.9-1.0) = more diverse</p>
+            </div>
+            
+            {/* Top K */}
+            <div className="space-y-2">
+              <label className="flex items-center justify-between text-sm font-medium text-gray-700">
+                <span>Top K</span>
+                <span className="text-gray-500">{topK}</span>
+              </label>
+              <input
+                type="range"
+                min="1"
+                max="100"
+                step="1"
+                value={topK}
+                onChange={(e) => setTopK(parseInt(e.target.value))}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
+              />
+              <p className="text-xs text-gray-500">Number of top tokens to consider. Lower = more deterministic</p>
+            </div>
+            
+            {/* Max Output Tokens */}
+            <div className="space-y-2">
+              <label className="flex items-center justify-between text-sm font-medium text-gray-700">
+                <span>Max Output Tokens</span>
+                <span className="text-gray-500">{maxOutputTokens}</span>
+              </label>
+              <input
+                type="range"
+                min="256"
+                max="8192"
+                step="256"
+                value={maxOutputTokens}
+                onChange={(e) => setMaxOutputTokens(parseInt(e.target.value))}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
+              />
+              <p className="text-xs text-gray-500">Maximum length of AI responses</p>
+            </div>
+          </div>
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <button
+              onClick={() => {
+                setTemperature(0.1);
+                setTopP(0.3);
+                setTopK(10);
+                setMaxOutputTokens(8192);
+              }}
+              className="text-sm text-green-600 hover:text-green-700 font-medium"
+            >
+              <i className="fas fa-undo mr-2"></i>
+              Reset to Low Temperature (More Deterministic)
+            </button>
+          </div>
+        </div>
+      )}
       
       {/* AI Speaking First Indicator */}
       {isWaitingForAiGreeting && (
