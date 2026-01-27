@@ -1,21 +1,27 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Scenario, DailyNugget, Course, DailyQuest } from '@/types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Scenario, DailyNugget, Course, DailyQuest, Category } from '@/types';
 import { contentService } from '@/lib/services/contentService';
 import { AI_AGENT } from '@/lib/constants';
 import EmptyState from '@/components/EmptyState';
 import LoadingSpinner from '@/components/LoadingSpinner';
 
+const UNCATEGORIZED_KEY = '__uncategorized__';
+const SCENARIOS_PER_CATEGORY_PREVIEW = 3;
+
 interface DashboardProps {
   onStartScenario: (scenario: Scenario) => void;
   onOpenCourse: () => void;
   onStartShadowing: () => void;
-  onViewScenarios: () => void;
+  onViewScenarios: (categoryId?: string) => void;
   scenarios: Scenario[];
+  categories: Category[];
   nuggets: DailyNugget[];
   course: Course;
   quests: DailyQuest[];
+  onRefresh?: () => Promise<void>;
+  isRefreshing?: boolean;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
@@ -24,13 +30,40 @@ const Dashboard: React.FC<DashboardProps> = ({
   onStartShadowing,
   onViewScenarios,
   scenarios, 
+  categories,
   nuggets, 
   course, 
-  quests 
+  quests,
+  onRefresh,
+  isRefreshing = false,
 }) => {
   const [badges, setBadges] = useState<any[]>([]);
-
   const [badgesLoading, setBadgesLoading] = useState(true);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+
+  const scenariosByCategory = useMemo(() => {
+    const map = new Map<string, Scenario[]>();
+    for (const s of scenarios) {
+      const key = s.categoryId ?? UNCATEGORIZED_KEY;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(s);
+    }
+    return map;
+  }, [scenarios]);
+
+  const orderedCategoryIds = useMemo(() => {
+    const uncategorized = scenariosByCategory.has(UNCATEGORIZED_KEY);
+    const ids = categories
+      .filter((c) => scenariosByCategory.has(c.id))
+      .sort((a, b) => (a.orderIndex ?? 999) - (b.orderIndex ?? 999))
+      .map((c) => c.id);
+    if (uncategorized) ids.push(UNCATEGORIZED_KEY);
+    return ids;
+  }, [categories, scenariosByCategory]);
+
+  const visibleCategoryIds = categoryFilter === null || categoryFilter === ''
+    ? orderedCategoryIds
+    : orderedCategoryIds.filter((id) => id === categoryFilter);
 
   useEffect(() => {
     contentService.getBadges()
@@ -54,39 +87,23 @@ const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div className="space-y-8 pb-12">
       {/* Hero Section */}
-      <section className="bg-gradient-to-br from-slate-800 via-slate-900 to-slate-800 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden group">
+      <section className="bg-gradient-to-br from-emerald-800 via-teal-900 to-slate-900 rounded-3xl p-8 md:p-10 text-white shadow-2xl relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
-          <div className="max-w-md">
-            <h1 className="text-3xl font-extrabold mb-2">Namaskar! 🙏</h1>
-            <p className="text-slate-200 text-lg">{AI_AGENT.NAME}, your linguistic coach, is ready. Choose your practice method.</p>
-            <div className="flex flex-wrap gap-4 mt-8">
-              <button onClick={onOpenCourse} className="bg-green-500 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-green-600 transition-all flex items-center gap-2">
-                <i className="fas fa-book-open"></i> Guided Lesson
+          <div className="max-w-lg">
+            <h1 className="text-3xl md:text-4xl font-extrabold mb-3 tracking-tight">Namaskar! 🙏</h1>
+            <p className="text-emerald-100/90 text-lg md:text-xl leading-relaxed">
+              {AI_AGENT.NAME}, your coach, is ready. Pick a subject and start practicing.
+            </p>
+            <div className="flex flex-wrap gap-3 mt-8">
+              <button onClick={onOpenCourse} className="bg-white text-emerald-800 font-bold py-3 px-6 rounded-xl shadow-lg hover:bg-emerald-50 transition-all flex items-center gap-2">
+                <i className="fas fa-book-open"></i> Guided Lessons
               </button>
-              {/* <button onClick={onStartShadowing} className="bg-white/10 backdrop-blur-sm border border-white/30 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-white/20 transition-all flex items-center gap-2">
-                <i className="fas fa-volume-up"></i> Pronunciation
-              </button> */}
-              <button onClick={onViewScenarios} className="bg-white/10 backdrop-blur-sm border border-white/30 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-white/20 transition-all flex items-center gap-2">
-                <i className="fas fa-comments"></i> Scenarios
+              <button onClick={() => onViewScenarios()} className="bg-white/15 backdrop-blur border border-white/30 text-white font-bold py-3 px-6 rounded-xl hover:bg-white/25 transition-all flex items-center gap-2">
+                <i className="fas fa-comments"></i> All Scenarios
               </button>
             </div>
           </div>
-
-          {/* <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 min-w-[280px]">
-            <p className="text-xs font-black uppercase tracking-widest text-blue-200 mb-3">Level: {course.title}</p>
-            <h3 className="font-bold text-xl mb-1">{nextLesson?.title || 'No lessons available'}</h3>
-            {course && (
-              <>
-                <div className="w-full bg-white/20 h-1.5 rounded-full mb-2 mt-4">
-                  <div className="bg-white h-full rounded-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
-                </div>
-                <p className="text-[10px] font-bold text-right">{progressPercent}% Progress</p>
-              </>
-            )}
-          </div> */}
-        </div>
-        <div className="absolute top-0 right-0 p-8 opacity-10 scale-150 rotate-12 transition-transform duration-700 group-hover:rotate-45">
-           <i className="fas fa-microphone-lines text-9xl"></i>
+          <div className="hidden md:block absolute top-8 right-8 w-32 h-32 rounded-full bg-white/5 blur-2xl" />
         </div>
       </section>
 
@@ -127,42 +144,109 @@ const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div> */}
 
-          {/* Scenarios List */}
-          <div className="space-y-6">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <i className="fas fa-comments text-green-600"></i> Live Lab Scenarios
-            </h2>
-            <div className="grid sm:grid-cols-3 gap-4">
-              {scenarios.length === 0 ? (
-                <div className="col-span-3">
-                  <EmptyState
-                    icon="fa-comments"
-                    title="No scenarios available"
-                    description="Scenarios will appear here when available"
-                  />
-                </div>
-              ) : (
-                scenarios.map((s) => (
-                  <button 
-                    key={s.id} 
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onStartScenario(s);
-                    }} 
-                    className="group p-6 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-green-200 text-left transition-all focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-                    aria-label={`Start scenario: ${s.title}`}
-                    type="button"
+          {/* Scenarios by Category */}
+          <div className="space-y-8">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <span className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                  <i className="fas fa-flask"></i>
+                </span>
+                Live Lab Scenarios
+              </h2>
+              <div className="flex items-center gap-3">
+                {categories.length > 0 && (
+                  <select
+                    value={categoryFilter ?? ''}
+                    onChange={(e) => setCategoryFilter(e.target.value === '' ? null : e.target.value)}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-400 transition-shadow"
                   >
-                  <div className="w-12 h-12 rounded-xl bg-green-50 text-green-600 flex items-center justify-center mb-4 group-hover:bg-green-600 group-hover:text-white transition-colors">
-                      <i className={`fas ${s.icon} text-xl`} aria-hidden="true"></i>
-                  </div>
-                  <h3 className="font-bold text-gray-900 group-hover:text-green-600 transition-colors">{s.title}</h3>
-                  <p className="text-sm text-gray-500 mt-1 line-clamp-2">{s.description}</p>
-                </button>
-                ))
-              )}
+                    <option value="">All categories</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                    {scenariosByCategory.has(UNCATEGORIZED_KEY) && (
+                      <option value={UNCATEGORIZED_KEY}>Uncategorized</option>
+                    )}
+                  </select>
+                )}
+                {onRefresh && (
+                  <button
+                    type="button"
+                    onClick={() => onRefresh()}
+                    disabled={isRefreshing}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60 flex items-center gap-2"
+                    title="Refresh"
+                  >
+                    <i className={`fas fa-sync-alt ${isRefreshing ? 'animate-spin' : ''}`}></i>
+                    Refresh
+                  </button>
+                )}
+              </div>
             </div>
+
+            {scenarios.length === 0 ? (
+              <div className="bg-white rounded-2xl p-12 border border-slate-100 shadow-sm">
+                <EmptyState
+                  icon="fa-flask"
+                  title="No scenarios yet"
+                  description="Run database init to seed scenarios, or add them from Admin. You can also generate a custom scenario from the Scenarios page."
+                  action={onRefresh ? { label: 'Refresh', onClick: () => onRefresh() } : undefined}
+                />
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {visibleCategoryIds.map((catId) => {
+                  const list = scenariosByCategory.get(catId) ?? [];
+                  const categoryName = catId === UNCATEGORIZED_KEY ? 'Uncategorized' : (categories.find((c) => c.id === catId)?.name ?? 'Uncategorized');
+                  const preview = list.slice(0, SCENARIOS_PER_CATEGORY_PREVIEW);
+                  const hasMore = list.length > SCENARIOS_PER_CATEGORY_PREVIEW;
+                  const showViewAll = list.length > 0;
+                  return (
+                    <section key={catId} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                      <div className="px-6 py-4 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
+                        <h3 className="text-base font-bold text-slate-800">{categoryName}</h3>
+                        {showViewAll && (
+                          <button
+                            type="button"
+                            onClick={() => onViewScenarios(catId === UNCATEGORIZED_KEY ? undefined : catId)}
+                            className="text-sm font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-2"
+                          >
+                            {hasMore ? `See all ${list.length}` : 'View all'}
+                            <i className="fas fa-arrow-right text-xs"></i>
+                          </button>
+                        )}
+                      </div>
+                      <div className="p-6">
+                        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {preview.map((s) => (
+                            <button
+                              key={s.id}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onStartScenario(s);
+                              }}
+                              className="group p-5 rounded-xl border border-slate-100 hover:shadow-lg hover:border-emerald-200 hover:bg-emerald-50/30 text-left transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                              aria-label={`Start scenario: ${s.title}`}
+                              type="button"
+                            >
+                              <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-3 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                                <i className={`fas ${s.icon || 'fa-comments'} text-lg`} aria-hidden="true"></i>
+                              </div>
+                              <h4 className="font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">{s.title}</h4>
+                              <p className="text-sm text-slate-500 mt-1 line-clamp-2">{s.description}</p>
+                            </button>
+                          ))}
+                        </div>
+                        {preview.length === 0 && (
+                          <p className="text-sm text-slate-500">No scenarios in this category yet.</p>
+                        )}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 

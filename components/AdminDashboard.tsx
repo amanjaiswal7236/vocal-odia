@@ -3,38 +3,44 @@
 
 import React, { useState } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
-import { Scenario, DailyNugget, UsageStats, UserUsage, Course, CourseLevel, Module, Lesson, UserSession } from '@/types';
+import { Scenario, DailyNugget, UsageStats, UserUsage, Course, CourseLevel, Module, Lesson, UserSession, Category } from '@/types';
 import { contentService } from '@/lib/services/contentService';
 
 interface AdminDashboardProps {
   scenarios: Scenario[];
+  categories: Category[];
   nuggets: DailyNugget[];
   courses: Course[];
   stats: UsageStats;
   users: UserUsage[];
   onUpdateScenarios: (scenarios: Scenario[]) => void;
+  onUpdateCategories: (categories: Category[] | ((prev: Category[]) => Category[])) => void;
   onUpdateNuggets: (nuggets: DailyNugget[]) => void;
   onUpdateCourses: (courses: Course[]) => void;
+  onRefreshContent?: () => Promise<void>;
   onExit: () => void;
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
   scenarios, 
+  categories,
   nuggets, 
   courses,
   stats, 
   users,
   onUpdateScenarios, 
+  onUpdateCategories,
   onUpdateNuggets,
   onUpdateCourses,
+  onRefreshContent,
   onExit 
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'scenarios' | 'nuggets' | 'courses'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'categories' | 'scenarios' | 'nuggets' | 'courses'>('overview');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [userSessions, setUserSessions] = useState<UserSession[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const [sessionMessages, setSessionMessages] = useState<Array<{ id: string; text: string; sender: 'user' | 'ai'; timestamp: number; audioUrl?: string | null; detectedLanguage?: string | null; isFlagged?: boolean }>>([]);
+  const [sessionMessages, setSessionMessages] = useState<Array<{ id: string; text: string; sender: 'user' | 'ai'; timestamp: number; audioUrl?: string | null; detectedLanguage?: string | null; isFlagged?: boolean; feedback?: 'up' | 'down' | null; feedbackReason?: string | null }>>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [selectedSession, setSelectedSession] = useState<UserSession | null>(null);
   
@@ -47,12 +53,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     icon: 'fa-comments', 
     prompt: '', 
     image: '',
+    categoryId: null as string | null,
     temperature: undefined as number | undefined,
     topP: undefined as number | undefined,
     topK: undefined as number | undefined,
     maxOutputTokens: undefined as number | undefined
   });
   const [showHyperparameters, setShowHyperparameters] = useState(false);
+
+  // Categories State
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [newCategory, setNewCategory] = useState({ name: '', description: '', order_index: 0 });
 
   // Courses State
   const [isAddingCourse, setIsAddingCourse] = useState(false);
@@ -69,18 +81,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     e.preventDefault();
     if (!newScenario.title || !newScenario.description || !newScenario.prompt) return;
     try {
+      const payload = { ...newScenario, category_id: newScenario.categoryId || null };
       if (editingScenario) {
-        // Update existing scenario
-        const updated = await contentService.updateScenario(parseInt(editingScenario.id), newScenario);
+        const updated = await contentService.updateScenario(parseInt(editingScenario.id), payload);
         onUpdateScenarios(scenarios.map(s => s.id === editingScenario.id 
-          ? { ...updated, id: updated.id.toString(), image: updated.image || undefined }
+          ? { ...updated, id: updated.id.toString(), image: updated.image || undefined, categoryId: updated.category_id != null ? String(updated.category_id) : null }
           : s
         ));
         setEditingScenario(null);
       } else {
-        // Create new scenario
-        const created = await contentService.createScenario(newScenario);
-        onUpdateScenarios([...scenarios, { ...created, id: created.id.toString(), image: created.image || undefined }]);
+        const created = await contentService.createScenario(payload);
+        onUpdateScenarios([...scenarios, { ...created, id: created.id.toString(), image: created.image || undefined, categoryId: created.category_id != null ? String(created.category_id) : null }]);
       }
       setIsAddingScenario(false);
       setNewScenario({ 
@@ -89,6 +100,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         icon: 'fa-comments', 
         prompt: '', 
         image: '',
+        categoryId: null,
         temperature: undefined,
         topP: undefined,
         topK: undefined,
@@ -109,6 +121,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       icon: scenario.icon,
       prompt: scenario.prompt,
       image: scenario.image || '',
+      categoryId: scenario.categoryId ?? null,
       temperature: scenario.temperature,
       topP: scenario.topP,
       topK: scenario.topK,
@@ -191,13 +204,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     try {
       if (editingCourse) {
-        // Update existing course
         const updated = await contentService.updateCourse(parseInt(editingCourse.id), {
           title: newCourse.title!,
           description: newCourse.description || '',
           level: newCourse.level,
           modules: newCourse.modules as Module[],
-          is_unlocked: editingCourse.isUnlocked
+          is_unlocked: editingCourse.isUnlocked,
+          category_id: newCourse.categoryId || null
         });
         // Reload courses to get updated data
         const allCourses = await contentService.getCourses();
@@ -223,13 +236,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onUpdateCourses(transformedCourses);
         setEditingCourse(null);
       } else {
-        // Create new course
         const created = await contentService.createCourse({
           title: newCourse.title!,
           description: newCourse.description || '',
           level: newCourse.level,
           modules: newCourse.modules as Module[],
-          is_unlocked: courses.length === 0
+          is_unlocked: courses.length === 0,
+          category_id: newCourse.categoryId || null
         });
         onUpdateCourses([...courses, {
           id: created.id.toString(),
@@ -260,6 +273,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           title: fullCourse.title,
           description: fullCourse.description,
           level: fullCourse.level,
+          categoryId: fullCourse.category_id != null ? String(fullCourse.category_id) : undefined,
           modules: fullCourse.modules.map((m: any) => ({
             id: m.id.toString(),
             title: m.title,
@@ -310,6 +324,52 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const handleSaveCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCategory.name.trim()) {
+      alert('Category name is required.');
+      return;
+    }
+    try {
+      if (editingCategory) {
+        await contentService.updateCategory(parseInt(editingCategory.id), {
+          name: newCategory.name.trim(),
+          description: newCategory.description.trim() || undefined,
+          order_index: newCategory.order_index,
+        });
+        onUpdateCategories(prev => prev.map(c => c.id === editingCategory.id
+          ? { ...c, name: newCategory.name.trim(), description: newCategory.description.trim() || undefined, orderIndex: newCategory.order_index }
+          : c));
+        setEditingCategory(null);
+      } else {
+        const created = await contentService.createCategory({
+          name: newCategory.name.trim(),
+          description: newCategory.description.trim() || undefined,
+          order_index: newCategory.order_index,
+        });
+        onUpdateCategories(prev => [...prev, { id: String(created.id), name: created.name, description: created.description, orderIndex: created.order_index }]);
+      }
+      setIsAddingCategory(false);
+      setNewCategory({ name: '', description: '', order_index: 0 });
+      await onRefreshContent?.();
+    } catch (error: any) {
+      console.error('Failed to save category:', error);
+      alert(error?.message || 'Failed to save category');
+    }
+  };
+
+  const removeCategory = async (id: string) => {
+    if (!confirm('Delete this category? Scenarios and courses in it will become uncategorized.')) return;
+    try {
+      await contentService.deleteCategory(parseInt(id));
+      onUpdateCategories(prev => prev.filter(c => c.id !== id));
+      await onRefreshContent?.();
+    } catch (error) {
+      console.error('Failed to delete category:', error);
+      alert('Failed to delete category');
+    }
+  };
+
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   };
@@ -325,6 +385,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </button>
         <button onClick={() => { setActiveTab('courses'); setIsAddingCourse(false); setEditingCourse(null); }} className={`px-6 py-4 font-bold text-sm whitespace-nowrap transition-colors ${activeTab === 'courses' ? 'text-green-600 border-b-2 border-green-600 bg-white' : 'text-gray-500 hover:text-gray-700'}`}>
           <i className="fas fa-graduation-cap mr-2"></i> Courses
+        </button>
+        <button onClick={() => { setActiveTab('categories'); setIsAddingCategory(false); setEditingCategory(null); }} className={`px-6 py-4 font-bold text-sm whitespace-nowrap transition-colors ${activeTab === 'categories' ? 'text-green-600 border-b-2 border-green-600 bg-white' : 'text-gray-500 hover:text-gray-700'}`}>
+          <i className="fas fa-folder mr-2"></i> Categories
         </button>
         <button onClick={() => { setActiveTab('scenarios'); setIsAddingScenario(false); setEditingScenario(null); }} className={`px-6 py-4 font-bold text-sm whitespace-nowrap transition-colors ${activeTab === 'scenarios' ? 'text-green-600 border-b-2 border-green-600 bg-white' : 'text-gray-500 hover:text-gray-700'}`}>
           <i className="fas fa-list mr-2"></i> Scenarios
@@ -495,6 +558,71 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
+        {activeTab === 'categories' && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            {!isAddingCategory ? (
+              <>
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-lg">Subjects / Categories</h3>
+                  <button
+                    onClick={() => {
+                      setEditingCategory(null);
+                      setNewCategory({ name: '', description: '', order_index: categories.length });
+                      setIsAddingCategory(true);
+                    }}
+                    className="bg-green-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md hover:bg-green-700 transition-all active:scale-95"
+                  >
+                    + Add Category
+                  </button>
+                </div>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {categories.length === 0 ? (
+                    <div className="col-span-full text-center py-12 text-gray-500">
+                      <i className="fas fa-folder-open text-4xl mb-3"></i>
+                      <p>No categories yet. Add one to group scenarios and courses by subject.</p>
+                    </div>
+                  ) : (
+                    categories.map((c) => (
+                      <div key={c.id} className="p-6 bg-white border border-gray-100 rounded-2xl shadow-sm relative group">
+                        <h4 className="font-bold text-gray-900">{c.name}</h4>
+                        {c.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{c.description}</p>}
+                        <div className="flex gap-2 mt-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => { setEditingCategory(c); setNewCategory({ name: c.name, description: c.description || '', order_index: c.orderIndex ?? 0 }); setIsAddingCategory(true); }} className="text-gray-400 hover:text-blue-500" title="Edit"><i className="fas fa-edit"></i></button>
+                          <button onClick={() => removeCategory(c.id)} className="text-gray-400 hover:text-red-500" title="Delete"><i className="fas fa-trash"></i></button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="max-w-md mx-auto bg-gray-50 rounded-3xl p-8 border border-gray-100">
+                <div className="flex items-center gap-3 mb-6">
+                  <button onClick={() => { setIsAddingCategory(false); setEditingCategory(null); setNewCategory({ name: '', description: '', order_index: 0 }); }} className="text-gray-400 hover:text-gray-600"><i className="fas fa-arrow-left"></i></button>
+                  <h3 className="font-bold text-xl text-gray-900">{editingCategory ? 'Edit Category' : 'New Category'}</h3>
+                </div>
+                <form onSubmit={handleSaveCategory} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-black text-gray-400 uppercase mb-2">Name *</label>
+                    <input type="text" required value={newCategory.name} onChange={e => setNewCategory({ ...newCategory, name: e.target.value })} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-green-500" placeholder="e.g. English, Math, Science" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-gray-400 uppercase mb-2">Description (optional)</label>
+                    <textarea value={newCategory.description} onChange={e => setNewCategory({ ...newCategory, description: e.target.value })} rows={2} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-green-500 resize-none" placeholder="Brief description of this subject" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-gray-400 uppercase mb-2">Order</label>
+                    <input type="number" min={0} value={newCategory.order_index} onChange={e => setNewCategory({ ...newCategory, order_index: parseInt(e.target.value, 10) || 0 })} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-green-500" />
+                  </div>
+                  <button type="submit" className="w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:bg-green-700">
+                    {editingCategory ? 'Update Category' : 'Create Category'}
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === 'courses' && (
           <div className="space-y-6 animate-in fade-in duration-300">
             {!isAddingCourse ? (
@@ -569,6 +697,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Description</label>
                     <textarea value={newCourse.description} onChange={e => setNewCourse({...newCourse, description: e.target.value})} rows={2} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none resize-none" placeholder="Briefly describe what students will learn..." />
                   </div>
+                  {categories.length > 0 && (
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Category (Subject)</label>
+                      <select value={newCourse.categoryId ?? ''} onChange={e => setNewCourse({...newCourse, categoryId: e.target.value || undefined})} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none">
+                        <option value="">— None —</option>
+                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                  )}
 
                   <div className="bg-green-50 p-6 rounded-2xl border border-green-100">
                     <div className="flex justify-between items-center mb-4">
@@ -611,7 +748,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="space-y-4 animate-in fade-in duration-300">
             {selectedSessionId ? (
               <div>
-                <div className="flex items-center gap-4 mb-6">
+                <div className="flex items-center gap-4 mb-6 flex-wrap">
                   <button 
                     onClick={() => {
                       setSelectedSessionId(null);
@@ -622,10 +759,32 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   >
                     <i className="fas fa-arrow-left"></i>
                   </button>
-                  <h3 className="font-bold text-lg flex items-center gap-2">
+                  <h3 className="font-bold text-lg flex items-center gap-2 flex-1 min-w-0">
                     <i className="fas fa-comments text-indigo-600"></i> 
                     Conversation: {selectedSession?.scenarioTitle || 'Session'}
                   </h3>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!selectedSessionId) return;
+                      setLoadingMessages(true);
+                      try {
+                        const messages = await contentService.getSessionMessages(parseInt(selectedSessionId));
+                        setSessionMessages(messages);
+                      } catch (e) {
+                        console.error('Failed to refresh messages:', e);
+                        setSessionMessages([]);
+                      } finally {
+                        setLoadingMessages(false);
+                      }
+                    }}
+                    disabled={loadingMessages}
+                    className="text-sm font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                    title="Refresh to see latest feedback"
+                  >
+                    <i className={`fas fa-sync-alt mr-1.5 ${loadingMessages ? 'animate-spin' : ''}`}></i>
+                    Refresh
+                  </button>
                 </div>
                 {loadingMessages ? (
                   <div className="text-center py-12 text-gray-400">
@@ -715,6 +874,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       >
                                         Your browser does not support the audio element.
                                       </audio>
+                                    </div>
+                                  )}
+                                  {message.sender === 'ai' && (message.feedback === 'up' || message.feedback === 'down' || message.feedbackReason) && (
+                                    <div className="mt-3 pt-3 border-t border-gray-200 space-y-1">
+                                      {message.feedback && (
+                                        <div className="flex items-center gap-2 text-xs font-medium text-gray-600">
+                                          {message.feedback === 'up' ? (
+                                            <><i className="fas fa-thumbs-up text-green-600"></i> Thumbs up</>
+                                          ) : (
+                                            <><i className="fas fa-thumbs-down text-red-600"></i> Thumbs down</>
+                                          )}
+                                        </div>
+                                      )}
+                                      {message.feedbackReason && (
+                                        <div className="text-xs rounded-lg bg-amber-50 border border-amber-100 px-3 py-2 text-amber-900">
+                                          <span className="font-semibold">Reason: </span>
+                                          {message.feedbackReason}
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>
@@ -888,6 +1066,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         icon: 'fa-comments', 
                         prompt: '', 
                         image: '',
+                        categoryId: null,
                         temperature: undefined,
                         topP: undefined,
                         topK: undefined,
@@ -906,6 +1085,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <tr>
                         <th className="px-6 py-4">Title</th>
                         <th className="px-6 py-4">Icon</th>
+                        <th className="px-6 py-4">Category</th>
                         <th className="px-6 py-4">Description</th>
                         <th className="px-6 py-4 text-right">Actions</th>
                       </tr>
@@ -915,6 +1095,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <tr key={s.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-6 py-4 font-bold text-gray-900">{s.title}</td>
                           <td className="px-6 py-4"><i className={`fas ${s.icon} text-green-600`}></i></td>
+                          <td className="px-6 py-4 text-gray-500">{s.category ? s.category.name : '—'}</td>
                           <td className="px-6 py-4 text-gray-500 max-w-xs truncate">{s.description}</td>
                           <td className="px-6 py-4 text-right">
                             <button 
@@ -942,7 +1123,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="max-w-2xl mx-auto bg-white rounded-3xl p-8 border border-gray-100 shadow-xl overflow-hidden">
                 <div className="bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800 p-6 -m-8 mb-6 text-white">
                   <div className="flex items-center gap-3">
-                    <button onClick={() => {
+                    <button type="button" onClick={() => {
                       setIsAddingScenario(false);
                       setEditingScenario(null);
                       setNewScenario({ 
@@ -951,6 +1132,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         icon: 'fa-comments', 
                         prompt: '', 
                         image: '',
+                        categoryId: null,
                         temperature: undefined,
                         topP: undefined,
                         topK: undefined,
@@ -985,6 +1167,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <input type="url" value={newScenario.image} onChange={e => setNewScenario({...newScenario, image: e.target.value})} placeholder="https://example.com/image.jpg" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 transition-all font-medium" />
                     <p className="text-xs text-gray-400 mt-1">Provide an image URL that represents this scenario</p>
                   </div>
+                  {categories.length > 0 && (
+                    <div>
+                      <label className="block text-xs font-black text-gray-400 uppercase mb-2">Category (Subject)</label>
+                      <select value={newScenario.categoryId ?? ''} onChange={e => setNewScenario({...newScenario, categoryId: e.target.value || null})} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 font-medium">
+                        <option value="">— None —</option>
+                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                  )}
                   
                   {/* Hyperparameters Section */}
                   <div className="border-t border-gray-200 pt-6">

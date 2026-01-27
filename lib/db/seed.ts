@@ -5,6 +5,20 @@ export const seedData = async () => {
   try {
     console.log('Starting database seeding...');
 
+    // 0. Seed Categories (subjects) – run first so scenarios/courses can reference them
+    const categoriesCheck = await query('SELECT COUNT(*) FROM categories');
+    if (parseInt(categoriesCheck.rows[0].count) === 0) {
+      await query(`
+        INSERT INTO categories (name, description, order_index) VALUES
+        ('English', 'English language and conversation practice', 0),
+        ('Math', 'Mathematics practice and tutoring', 1),
+        ('Science', 'Science topics and explanations', 2)
+      `);
+      console.log('✓ Categories seeded');
+    } else {
+      console.log('✓ Categories already exist, skipping...');
+    }
+
     // 1. Seed Scenarios
     console.log('Seeding scenarios...');
     const scenariosCheck = await query('SELECT COUNT(*) FROM scenarios');

@@ -51,10 +51,13 @@ export async function uploadAudioBlob(
   contentType: string = 'audio/webm'
 ): Promise<string | null> {
   console.log(`[uploadAudioBlob] Starting upload: ${blobName}, size: ${audioBlob.size}, type: ${contentType}`);
+  if (!process.env.AZURE_STORAGE_CONNECTION_STRING) {
+    console.warn('[uploadAudioBlob] AZURE_STORAGE_CONNECTION_STRING is not set. Audio will not be saved.');
+    return null;
+  }
   const containerReady = await ensureContainerExists();
-  
   if (!containerReady || !containerClient) {
-    console.warn('[uploadAudioBlob] Azure Blob Storage not available. Skipping audio upload.');
+    console.warn('[uploadAudioBlob] Azure container not ready (ensureContainerExists failed or containerClient null). Check connection string and container name.');
     return null;
   }
 
@@ -77,8 +80,12 @@ export async function uploadAudioBlob(
     
     // Return the blob URL (permanent, but requires SAS token for access)
     return blobUrl;
-  } catch (error) {
-    console.error('[uploadAudioBlob] Error uploading audio blob:', error);
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error('[uploadAudioBlob] Error uploading audio blob:', err?.message ?? error);
+    if (err?.message?.includes('BlobNotFound') || err?.message?.includes('AuthenticationFailed')) {
+      console.error('[uploadAudioBlob] Check: connection string, storage account key, and container name (default: audio-recordings).');
+    }
     return null;
   }
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Dashboard from '@/components/Dashboard';
 import { authService } from '@/lib/services/authService';
@@ -10,7 +10,18 @@ import { Scenario } from '@/types';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { currentUser, scenarios, nuggets, courses, quests, loading, error } = useAppContext();
+  const { currentUser, scenarios, categories, nuggets, courses, quests, loading, error, refreshContent } = useAppContext();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    if (!currentUser || isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await refreshContent();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     if (!loading && !authService.isAuthenticated()) {
@@ -44,8 +55,9 @@ export default function DashboardPage() {
     router.push('/shadowing');
   };
 
-  const handleViewScenarios = () => {
-    router.push('/scenarios');
+  const handleViewScenarios = (categoryId?: string) => {
+    const q = categoryId && categoryId !== '__uncategorized__' ? `?category=${encodeURIComponent(categoryId)}` : '';
+    router.push(`/scenarios${q}`);
   };
 
   return (
@@ -74,9 +86,12 @@ export default function DashboardPage() {
         onStartShadowing={handleStartShadowing}
         onViewScenarios={handleViewScenarios}
         scenarios={scenarios}
+        categories={categories}
         nuggets={nuggets}
         course={courses[0] || { id: '', title: '', level: 'BEGINNER' as any, description: '', modules: [] }}
         quests={quests}
+        onRefresh={handleRefresh}
+        isRefreshing={isRefreshing}
       />
     </>
   );

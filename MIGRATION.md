@@ -141,3 +141,10 @@ This document outlines the key changes made during the migration from React + Vi
 
 For issues or questions about the migration, please refer to the main README.md or create an issue in the repository.
 
+
+sudo systemctl stop vocal-odia
+sleep 5
+sudo fuser -k 3003/tcp
+sudo cp /home/ubuntu/vocal-odia/vocal-odia.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start vocal-odia

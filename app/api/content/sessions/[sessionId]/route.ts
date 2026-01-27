@@ -48,24 +48,21 @@ export async function PATCH(
     `, [...updateValues, parseInt(sessionId)]);
 
     // Save conversation messages if provided
-    // Preserve existing audio URLs by fetching them first, then updating/inserting
+    // Preserve existing audio URLs and feedback by fetching once before delete, then re-inserting
     if (messages && Array.isArray(messages) && messages.length > 0) {
-      // Get existing messages with their audio URLs
+      // Get existing messages with audio URLs and feedback (before delete)
       const existingMessages = await query(`
-        SELECT id, text, sender, timestamp, audio_url
+        SELECT id, text, sender, timestamp, audio_url, feedback, feedback_reason
         FROM conversation_messages
         WHERE session_id = $1
         ORDER BY timestamp ASC
       `, [parseInt(sessionId)]);
       
-      // Create a map of existing audio URLs by timestamp and sender (for matching)
       const existingAudioUrls = new Map<string, string | null>();
+      const existingRows = existingMessages.rows as any[];
       existingMessages.rows.forEach((row: any) => {
-        if (row.audio_url) {
-          // Use timestamp and sender as key for matching
-          const key = `${row.timestamp}_${row.sender}`;
-          existingAudioUrls.set(key, row.audio_url);
-        }
+        const key = `${row.timestamp}_${row.sender}`;
+        if (row.audio_url) existingAudioUrls.set(key, row.audio_url);
       });
       
       // Delete existing messages for this session
@@ -73,14 +70,24 @@ export async function PATCH(
         DELETE FROM conversation_messages WHERE session_id = $1
       `, [parseInt(sessionId)]);
       
-      // Insert all messages with preserved audio URLs
-      for (const message of messages) {
+      // Insert all messages with preserved audio URLs and feedback
+      for (let idx = 0; idx < messages.length; idx++) {
+        const message = messages[idx] as any;
         const timestamp = message.timestamp || Date.now();
         const sender = message.sender || 'user';
         const key = `${timestamp}_${sender}`;
         
         // Use audioUrl from message if provided, otherwise try to match from existing
         const audioUrl = message.audioUrl || existingAudioUrls.get(key) || null;
+        // Prefer feedback from client (submitted during conversation); else preserve from existing row by index
+        const hasFromClient = message.feedback === 'up' || message.feedback === 'down';
+        const existingRow = existingRows[idx];
+        const feedback = hasFromClient
+          ? message.feedback
+          : (existingRow?.feedback || null);
+        const feedbackReason = hasFromClient && message.feedbackReason && String(message.feedbackReason).trim()
+          ? String(message.feedbackReason).trim()
+          : (existingRow?.feedback_reason ?? null);
         
         // Detect language for user messages only
         let detectedLanguage = message.detectedLanguage || null;
@@ -99,8 +106,8 @@ export async function PATCH(
         
         try {
           await query(`
-            INSERT INTO conversation_messages (session_id, text, sender, timestamp, audio_url, detected_language, is_flagged)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO conversation_messages (session_id, text, sender, timestamp, audio_url, detected_language, is_flagged, feedback, feedback_reason)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           `, [
             parseInt(sessionId),
             message.text || '',
@@ -108,7 +115,9 @@ export async function PATCH(
             timestamp,
             audioUrl,
             detectedLanguage,
-            isFlagged
+            isFlagged,
+            feedback,
+            feedbackReason
           ]);
         } catch (err: any) {
           console.error(`Error inserting message for session ${sessionId}:`, err);

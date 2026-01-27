@@ -18,16 +18,21 @@ export async function POST(
     const sender = formData.get('sender') as string;
     const messageIndex = formData.get('messageIndex') as string;
 
-    if (!audioFile) {
+    if (!audioFile || typeof (audioFile as File).size !== 'number') {
       return NextResponse.json({ error: 'No audio file provided' }, { status: 400 });
+    }
+    const file = audioFile as File;
+    if (file.size === 0) {
+      return NextResponse.json({ error: 'Audio file is empty' }, { status: 400 });
     }
 
     if (!sender || (sender !== 'user' && sender !== 'ai')) {
       return NextResponse.json({ error: 'Invalid sender. Must be "user" or "ai"' }, { status: 400 });
     }
 
-    if (!messageIndex) {
-      return NextResponse.json({ error: 'Message index is required' }, { status: 400 });
+    const idx = parseInt(messageIndex, 10);
+    if (!messageIndex || isNaN(idx) || idx < 0) {
+      return NextResponse.json({ error: 'Message index is required and must be a non-negative integer' }, { status: 400 });
     }
 
     // Verify session belongs to user
@@ -46,14 +51,14 @@ export async function POST(
     }
 
     // Convert File to Blob
-    const audioBlob = new Blob([await audioFile.arrayBuffer()], { type: audioFile.type });
+    const audioBlob = new Blob([await file.arrayBuffer()], { type: file.type || 'audio/webm' });
     
     // Upload to Azure (server-side)
     const audioUrl = await uploadMessageAudio(
-      parseInt(sessionId),
+      parseInt(sessionId, 10),
       audioBlob,
       sender as 'user' | 'ai',
-      parseInt(messageIndex)
+      idx
     );
 
     if (!audioUrl) {

@@ -9,7 +9,7 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 
 export default function AdminPage() {
   const router = useRouter();
-  const { currentUser, scenarios, nuggets, courses, usageStats, usersUsage, setScenarios, setNuggets, setCourses, loading } = useAppContext();
+  const { currentUser, scenarios, categories, nuggets, courses, usageStats, usersUsage, setScenarios, setCategories, setNuggets, setCourses, refreshContent, loading } = useAppContext();
 
   useEffect(() => {
     if (!loading) {
@@ -38,13 +38,16 @@ export default function AdminPage() {
   return (
     <AdminDashboard
       scenarios={scenarios}
+      categories={categories}
       nuggets={nuggets}
       courses={courses}
       stats={usageStats}
       users={usersUsage}
       onUpdateScenarios={setScenarios}
+      onUpdateCategories={setCategories}
       onUpdateNuggets={setNuggets}
       onUpdateCourses={setCourses}
+      onRefreshContent={refreshContent}
       onExit={handleExit}
     />
   );

@@ -27,23 +27,42 @@ const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
 };
 
 export const contentService = {
-  async getScenarios() {
+  async getCategories() {
     try {
-      const response = await retryRequest(
-        () => fetchWithAuth(`${API_URL}/content/scenarios`),
-        2
-      );
-      return response.json();
+      const path = `${API_URL}/content/categories`;
+      const url = path.startsWith('http') ? path : (typeof window !== 'undefined' ? window.location.origin : '') + (path.startsWith('/') ? path : '/' + path);
+      const response = await retryRequest(() => fetchWithAuth(url), 2);
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      return [];
+    }
+  },
+
+  async getScenarios(params?: { categoryId?: string | number | null }) {
+    try {
+      const path = `${API_URL}/content/scenarios`;
+      const url =
+        params?.categoryId != null && params.categoryId !== ''
+          ? `${path}?category_id=${encodeURIComponent(String(params.categoryId))}`
+          : path;
+      const fullUrl = url.startsWith('http') ? url : (typeof window !== 'undefined' ? window.location.origin : '') + (url.startsWith('/') ? url : '/' + url);
+      const response = await retryRequest(() => fetchWithAuth(fullUrl), 2);
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
     } catch (error) {
       throw new AppError('Failed to load scenarios. Please try again.', 'FETCH_SCENARIOS_ERROR');
     }
   },
 
-  async getCourses(userId?: number) {
+  async getCourses(userId?: number, params?: { categoryId?: string | number | null }) {
     try {
-      const url = userId 
+      let url = userId
         ? `${API_URL}/content/courses/user/${userId}`
         : `${API_URL}/content/courses`;
+      if (!userId && params?.categoryId != null && params.categoryId !== '') {
+        url += `?category_id=${encodeURIComponent(String(params.categoryId))}`;
+      }
       const response = await retryRequest(
         () => fetchWithAuth(url),
         2
@@ -128,6 +147,44 @@ export const contentService = {
       // Silently fail quest updates to not interrupt user experience
       console.error('Failed to update quest:', error);
       return { success: false };
+    }
+  },
+
+  // Admin category methods
+  async createCategory(data: { name: string; description?: string; order_index?: number }) {
+    try {
+      const response = await fetchWithAuth(`${API_URL}/content/categories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      return response.json();
+    } catch (error) {
+      throw new AppError('Failed to create category. Please try again.', 'CREATE_CATEGORY_ERROR');
+    }
+  },
+
+  async updateCategory(id: number, data: { name?: string; description?: string; order_index?: number }) {
+    try {
+      const response = await fetchWithAuth(`${API_URL}/content/categories/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      return response.json();
+    } catch (error) {
+      throw new AppError('Failed to update category. Please try again.', 'UPDATE_CATEGORY_ERROR');
+    }
+  },
+
+  async deleteCategory(id: number) {
+    try {
+      const response = await fetchWithAuth(`${API_URL}/content/categories/${id}`, {
+        method: 'DELETE',
+      });
+      return response.json();
+    } catch (error) {
+      throw new AppError('Failed to delete category. Please try again.', 'DELETE_CATEGORY_ERROR');
     }
   },
 
@@ -302,7 +359,7 @@ export const contentService = {
   async updateSession(sessionId: number, data: {
     tokensUsed: number;
     durationSeconds: number;
-    messages?: Array<{ text: string; sender: 'user' | 'ai'; timestamp: number; audioUrl?: string | null }>;
+    messages?: Array<{ text: string; sender: 'user' | 'ai'; timestamp: number; audioUrl?: string | null; feedback?: 'up' | 'down' | null; feedbackReason?: string | null }>;
     sessionAudioUrl?: string | null;
   }) {
     try {
@@ -355,6 +412,26 @@ export const contentService = {
       return response.json();
     } catch (error) {
       throw new AppError('Failed to load session messages. Please try again.', 'FETCH_SESSION_MESSAGES_ERROR');
+    }
+  },
+
+  async submitMessageFeedback(
+    sessionId: number,
+    messageId: string,
+    feedback: 'up' | 'down',
+    reason?: string
+  ) {
+    try {
+      const url = `${API_URL}/content/sessions/${sessionId}/messages/${messageId}/feedback`;
+      const fullUrl = url.startsWith('http') ? url : (typeof window !== 'undefined' ? window.location.origin : '') + (url.startsWith('/') ? url : '/' + url);
+      const response = await fetchWithAuth(fullUrl, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feedback, reason: reason ?? '' }),
+      });
+      return response.json();
+    } catch (error) {
+      throw new AppError('Failed to save feedback. Please try again.', 'SUBMIT_MESSAGE_FEEDBACK_ERROR');
     }
   },
 

@@ -2,9 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/middleware';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const coursesResult = await query('SELECT * FROM courses ORDER BY id');
+    const { searchParams } = new URL(req.url);
+    const categoryId = searchParams.get('category_id') || searchParams.get('categoryId');
+    const coursesResult = categoryId
+      ? await query(
+          `SELECT c.*, cat.name AS category_name, cat.description AS category_description, cat.order_index AS category_order_index
+           FROM courses c
+           LEFT JOIN categories cat ON cat.id = c.category_id
+           WHERE c.category_id = $1
+           ORDER BY c.id`,
+          [categoryId]
+        )
+      : await query(`
+          SELECT c.*, cat.name AS category_name, cat.description AS category_description, cat.order_index AS category_order_index
+          FROM courses c
+          LEFT JOIN categories cat ON cat.id = c.category_id
+          ORDER BY COALESCE(cat.order_index, 999) ASC, cat.name ASC, c.id
+        `);
     const courses = coursesResult.rows;
 
     for (const course of courses) {
@@ -36,11 +52,12 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     requireAdmin(req);
-    const { title, level, description, prerequisite_id, is_unlocked, modules } = await req.json();
+    const { title, level, description, prerequisite_id, is_unlocked, modules, category_id, categoryId } = await req.json();
+    const catId = category_id ?? categoryId;
     
     const courseResult = await query(
-      'INSERT INTO courses (title, level, description, prerequisite_id, is_unlocked) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [title, level, description, prerequisite_id || null, is_unlocked || false]
+      'INSERT INTO courses (title, level, description, prerequisite_id, category_id, is_unlocked) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [title, level, description, prerequisite_id || null, (catId != null && catId !== '') ? (typeof catId === 'number' ? catId : parseInt(String(catId), 10)) : null, is_unlocked ?? false]
     );
     const course = courseResult.rows[0];
 

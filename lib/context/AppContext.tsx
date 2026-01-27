@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { AuthUser, Scenario, DailyNugget, Course, DailyQuest, UsageStats, UserUsage } from '@/types';
+import { AuthUser, Scenario, DailyNugget, Course, DailyQuest, UsageStats, UserUsage, Category } from '@/types';
 import { authService } from '@/lib/services/authService';
 import { contentService } from '@/lib/services/contentService';
 import { useToast } from '@/components/Toast';
@@ -11,6 +11,7 @@ import { getErrorMessage } from '@/lib/utils/errorHandler';
 interface AppContextType {
   currentUser: AuthUser | null;
   scenarios: Scenario[];
+  categories: Category[];
   nuggets: DailyNugget[];
   courses: Course[];
   quests: DailyQuest[];
@@ -21,6 +22,7 @@ interface AppContextType {
   loadContent: (userId?: number) => Promise<void>;
   setCurrentUser: (user: AuthUser | null) => void;
   setScenarios: (scenarios: Scenario[] | ((prev: Scenario[]) => Scenario[])) => void;
+  setCategories: (categories: Category[] | ((prev: Category[]) => Category[])) => void;
   setNuggets: (nuggets: DailyNugget[] | ((prev: DailyNugget[]) => DailyNugget[])) => void;
   setCourses: (courses: Course[] | ((prev: Course[]) => Course[])) => void;
   setQuests: (quests: DailyQuest[] | ((prev: DailyQuest[]) => DailyQuest[])) => void;
@@ -47,6 +49,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   const { showToast } = useToast();
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [nuggets, setNuggets] = useState<DailyNugget[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [quests, setQuests] = useState<DailyQuest[]>([]);
@@ -66,7 +69,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     try {
       setLoading(true);
       setError(null);
-      const [scenariosData, nuggetsData, coursesData, questsData, statsData] = await Promise.allSettled([
+      const [categoriesData, scenariosData, nuggetsData, coursesData, questsData, statsData] = await Promise.allSettled([
+        contentService.getCategories(),
         contentService.getScenarios(),
         contentService.getNuggets(),
         userId ? contentService.getCourses(userId) : contentService.getCourses(),
@@ -75,19 +79,37 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         (userId && currentUser?.role !== 'admin') ? contentService.getStats(userId) : Promise.resolve(null)
       ]);
 
+      if (categoriesData.status === 'fulfilled' && Array.isArray(categoriesData.value)) {
+        setCategories((categoriesData.value as any[]).map((c: any) => ({
+          id: String(c.id),
+          name: c.name,
+          description: c.description,
+          orderIndex: c.order_index ?? c.orderIndex,
+        })));
+      } else if (categoriesData.status === 'fulfilled' && !Array.isArray(categoriesData.value)) {
+        setCategories([]);
+      }
+
       if (scenariosData.status === 'fulfilled') {
-        setScenarios(scenariosData.value.map((s: any) => ({ 
+        const raw = scenariosData.value;
+        const list = Array.isArray(raw) ? raw : [];
+        setScenarios(list.map((s: any) => ({ 
           ...s, 
-          id: s.id.toString(),
+          id: String(s.id),
           image: s.image || undefined,
           temperature: s.temperature ?? undefined,
           topP: s.top_p ?? undefined,
           topK: s.top_k ?? undefined,
-          maxOutputTokens: s.max_output_tokens ?? undefined
+          maxOutputTokens: s.max_output_tokens ?? undefined,
+          categoryId: s.category_id != null ? String(s.category_id) : null,
+          category: s.category ? { id: String(s.category.id || s.category_id), name: s.category.name, description: s.category.description, orderIndex: s.category.orderIndex ?? s.category.order_index } : (s.category_id != null && s.category_name ? { id: String(s.category_id), name: s.category_name, description: s.category_description, orderIndex: s.category_order_index } : null),
         })));
       } else {
-        console.error('Failed to load scenarios:', scenariosData.reason);
-        showToast('Failed to load some scenarios', 'warning');
+        if (scenariosData.status === 'rejected') {
+          console.error('Failed to load scenarios:', scenariosData.reason);
+          showToast('Failed to load some scenarios', 'warning');
+        }
+        setScenarios([]);
       }
 
       if (nuggetsData.status === 'fulfilled') {
@@ -95,17 +117,19 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
       }
 
       if (coursesData.status === 'fulfilled') {
-        const transformedCourses = coursesData.value.map((c: any) => ({
+        const transformedCourses = (coursesData.value as any[]).map((c: any) => ({
           id: c.id.toString(),
           title: c.title,
           level: c.level,
           description: c.description,
           prerequisiteId: c.prerequisite_id ? c.prerequisite_id.toString() : undefined,
           isUnlocked: c.is_unlocked,
-          modules: c.modules.map((m: any) => ({
+          categoryId: c.category_id != null ? String(c.category_id) : null,
+          category: (c.category_name || c.category_id) ? { id: String(c.category_id || ''), name: c.category_name || '', description: c.category_description, orderIndex: c.category_order_index } : null,
+          modules: (c.modules || []).map((m: any) => ({
             id: m.id.toString(),
             title: m.title,
-            lessons: m.lessons.map((l: any) => ({
+            lessons: (m.lessons || []).map((l: any) => ({
               id: l.id.toString(),
               title: l.title,
               objective: l.objective,
@@ -215,6 +239,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
       value={{
         currentUser,
         scenarios,
+        categories,
         nuggets,
         courses,
         quests,
@@ -225,6 +250,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         loadContent,
         setCurrentUser,
         setScenarios,
+        setCategories,
         setNuggets,
         setCourses,
         setQuests,

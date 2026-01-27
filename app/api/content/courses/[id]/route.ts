@@ -11,13 +11,15 @@ export async function PUT(
 ) {
   try {
     requireAdmin(req);
-    const { title, level, description, prerequisite_id, is_unlocked, modules } = await req.json();
+    const { title, level, description, prerequisite_id, is_unlocked, modules, category_id, categoryId } = await req.json();
     const { id } = await params;
+    const catId = category_id ?? categoryId;
+    const resolvedCatId = (catId != null && catId !== '') ? (typeof catId === 'number' ? catId : parseInt(String(catId), 10)) : null;
     
     // Update course
     const result = await query(
-      'UPDATE courses SET title = $1, level = $2, description = $3, prerequisite_id = $4, is_unlocked = $5, updated_at = CURRENT_TIMESTAMP WHERE id = $6 RETURNING *',
-      [title, level, description, prerequisite_id || null, is_unlocked || false, id]
+      'UPDATE courses SET title = $1, level = $2, description = $3, prerequisite_id = $4, is_unlocked = $5, category_id = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7 RETURNING *',
+      [title, level, description, prerequisite_id || null, is_unlocked ?? false, resolvedCatId, id]
     );
     
     if (result.rows.length === 0) {

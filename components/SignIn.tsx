@@ -109,11 +109,11 @@ const SignIn: React.FC<SignInProps> = ({ onSuccess, onSwitchToSignUp }) => {
             </p>
           </div>
 
-          <div className="mt-6 pt-6 border-t border-gray-100">
+          {/* <div className="mt-6 pt-6 border-t border-gray-100">
             <p className="text-xs text-gray-400 text-center">
               Admin? Use admin@vocalodia.com / admin123
             </p>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>

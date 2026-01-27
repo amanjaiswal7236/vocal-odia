@@ -21,6 +21,13 @@ export enum CourseLevel {
   ADVANCED = 'ADVANCED'
 }
 
+export interface Category {
+  id: string;
+  name: string;
+  description?: string;
+  orderIndex?: number;
+}
+
 export interface Scenario {
   id: string;
   title: string;
@@ -33,6 +40,8 @@ export interface Scenario {
   topP?: number;
   topK?: number;
   maxOutputTokens?: number;
+  categoryId?: string | null;
+  category?: Category | null;
 }
 
 export interface ShadowingTask {
@@ -73,6 +82,8 @@ export interface Course {
   modules: Module[];
   prerequisiteId?: string;
   isUnlocked?: boolean;
+  categoryId?: string | null;
+  category?: Category | null;
 }
 
 export interface CourseFeedback {
@@ -124,12 +135,15 @@ export interface UserSession {
 }
 
 export interface TranscriptionItem {
+  id?: string;
   text: string;
   sender: 'user' | 'ai';
   timestamp: number;
   audioUrl?: string | null;
   detectedLanguage?: string | null;
   isFlagged?: boolean;
+  feedback?: 'up' | 'down' | null;
+  feedbackReason?: string | null;
 }
 
 export interface AuthUser {

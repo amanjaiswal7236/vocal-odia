@@ -13,12 +13,17 @@ interface SessionDetailsProps {
   onBack: () => void;
 }
 
+type FeedbackModalState = { open: boolean; messageId: string | null; messageIndex: number };
+
 const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
   const { showToast } = useToast();
   const { currentUser } = useAppContext();
   const [messages, setMessages] = useState<TranscriptionItem[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [playingAudioIndex, setPlayingAudioIndex] = useState<number | null>(null);
+  const [feedbackModal, setFeedbackModal] = useState<FeedbackModalState>({ open: false, messageId: null, messageIndex: -1 });
+  const [feedbackReasonDraft, setFeedbackReasonDraft] = useState('');
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const audioRefs = React.useRef<Map<number, HTMLAudioElement>>(new Map());
   const isAdmin = currentUser?.role === 'admin';
   const formatDate = (timestamp: number) => {
@@ -101,6 +106,44 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
     if (playingAudioIndex === index) {
       setPlayingAudioIndex(null);
     }
+  };
+
+  const submitFeedback = async (messageId: string, feedback: 'up' | 'down', reason?: string) => {
+    try {
+      setSubmittingFeedback(true);
+      await contentService.submitMessageFeedback(parseInt(session.id), messageId, feedback, reason);
+      setMessages((prev) =>
+        prev.map((m, i) =>
+          m.id === messageId ? { ...m, feedback, feedbackReason: feedback === 'down' ? (reason ?? null) : null } : m
+        )
+      );
+      showToast(feedback === 'up' ? 'Thanks for your feedback!' : 'Feedback recorded.', 'success');
+    } catch (err) {
+      showToast(getErrorMessage(err), 'error');
+    } finally {
+      setSubmittingFeedback(false);
+      setFeedbackModal({ open: false, messageId: null, messageIndex: -1 });
+      setFeedbackReasonDraft('');
+    }
+  };
+
+  const handleThumbsUp = (message: TranscriptionItem) => {
+    if (!message.id) return;
+    submitFeedback(message.id, 'up');
+  };
+
+  const handleThumbsDown = (message: TranscriptionItem, index: number) => {
+    if (!message.id) return;
+    setFeedbackReasonDraft('');
+    setFeedbackModal({ open: true, messageId: message.id, messageIndex: index });
+  };
+
+  const handleFeedbackModalSubmit = () => {
+    if (feedbackModal.messageId) submitFeedback(feedbackModal.messageId, 'down', feedbackReasonDraft.trim() || undefined);
+  };
+
+  const handleFeedbackModalSkip = () => {
+    if (feedbackModal.messageId) submitFeedback(feedbackModal.messageId, 'down');
   };
 
   return (
@@ -246,7 +289,7 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
               
               return (
                 <div
-                  key={index}
+                  key={message.id ?? index}
                   className={`flex gap-4 ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   {message.sender === 'ai' && (
@@ -298,6 +341,32 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
                         >
                           {formatMessageTime(message.timestamp)}
                         </p>
+                        {message.id && message.sender === 'ai' && (
+                          <div className="flex items-center gap-2 mt-2">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleThumbsUp(message); }}
+                              className={`p-1.5 rounded-full transition-colors ${
+                                message.feedback === 'up' ? 'bg-gray-300 text-gray-700' : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'
+                              }`}
+                              title="Thumbs up"
+                              aria-label="Thumbs up"
+                            >
+                              <i className={`${message.feedback === 'up' ? 'fas' : 'far'} fa-thumbs-up text-sm`}></i>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleThumbsDown(message, index); }}
+                              className={`p-1.5 rounded-full transition-colors ${
+                                message.feedback === 'down' ? 'bg-gray-300 text-gray-700' : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'
+                              }`}
+                              title="Thumbs down"
+                              aria-label="Thumbs down"
+                            >
+                              <i className={`${message.feedback === 'down' ? 'fas' : 'far'} fa-thumbs-down text-sm`}></i>
+                            </button>
+                          </div>
+                        )}
                       </div>
                       {message.audioUrl && (
                         <div className={`flex-shrink-0 ml-2 ${
@@ -358,6 +427,53 @@ const SessionDetails: React.FC<SessionDetailsProps> = ({ session, onBack }) => {
           Back to Sessions
         </button>
       </div>
+
+      {/* Thumbs-down feedback reason modal */}
+      {feedbackModal.open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => !submittingFeedback && setFeedbackModal({ open: false, messageId: null, messageIndex: -1 })}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="feedback-modal-title"
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="feedback-modal-title" className="text-lg font-bold text-gray-900 mb-2">
+              Why wasn&apos;t this helpful?
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">Your feedback is optional. You can skip and continue.</p>
+            <textarea
+              value={feedbackReasonDraft}
+              onChange={(e) => setFeedbackReasonDraft(e.target.value)}
+              placeholder="e.g. Pronunciation was unclear, response was too long..."
+              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
+              rows={3}
+              disabled={submittingFeedback}
+            />
+            <div className="flex gap-3 mt-4">
+              <button
+                type="button"
+                onClick={handleFeedbackModalSubmit}
+                disabled={submittingFeedback}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-green-600 text-white font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors"
+              >
+                {submittingFeedback ? 'Saving…' : 'Submit'}
+              </button>
+              <button
+                type="button"
+                onClick={handleFeedbackModalSkip}
+                disabled={submittingFeedback}
+                className="flex-1 py-2.5 px-4 rounded-xl border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              >
+                Continue without reason
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

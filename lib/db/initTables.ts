@@ -2,6 +2,18 @@ import { query } from './index';
 
 export const initContentTables = async () => {
   try {
+    // Categories (subjects) table - admin-defined
+    await query(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL UNIQUE,
+        description TEXT,
+        order_index INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Scenarios table
     await query(`
       CREATE TABLE IF NOT EXISTS scenarios (
@@ -58,6 +70,19 @@ export const initContentTables = async () => {
       }
     }
 
+    try {
+      const catCol = await query(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'scenarios' AND column_name = 'category_id'
+      `);
+      if (catCol.rows.length === 0) {
+        await query('ALTER TABLE scenarios ADD COLUMN category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL');
+        console.log('✓ Added category_id column to scenarios table');
+      }
+    } catch (error: any) {
+      console.log('Scenarios category_id check:', error.message);
+    }
+
     // Courses table
     await query(`
       CREATE TABLE IF NOT EXISTS courses (
@@ -66,11 +91,25 @@ export const initContentTables = async () => {
         level VARCHAR(20) NOT NULL CHECK (level IN ('BEGINNER', 'INTERMEDIATE', 'ADVANCED')),
         description TEXT,
         prerequisite_id INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+        category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
         is_unlocked BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    try {
+      const courseCatCol = await query(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'courses' AND column_name = 'category_id'
+      `);
+      if (courseCatCol.rows.length === 0) {
+        await query('ALTER TABLE courses ADD COLUMN category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL');
+        console.log('✓ Added category_id column to courses table');
+      }
+    } catch (error: any) {
+      console.log('Courses category_id check:', error.message);
+    }
 
     // Modules table
     await query(`
@@ -256,6 +295,36 @@ export const initContentTables = async () => {
       }
     } catch (error: any) {
       console.log('Is flagged column check:', error.message);
+    }
+
+    // Add feedback column if it doesn't exist (thumbs up/down per message)
+    try {
+      const columnCheck = await query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'conversation_messages' AND column_name = 'feedback'
+      `);
+      if (columnCheck.rows.length === 0) {
+        await query(`ALTER TABLE conversation_messages ADD COLUMN feedback VARCHAR(10) CHECK (feedback IN ('up', 'down'))`);
+        console.log('✓ Added feedback column to conversation_messages table');
+      }
+    } catch (error: any) {
+      console.log('Feedback column check:', error.message);
+    }
+
+    // Add feedback_reason column if it doesn't exist (optional reason when thumbs down)
+    try {
+      const columnCheck = await query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'conversation_messages' AND column_name = 'feedback_reason'
+      `);
+      if (columnCheck.rows.length === 0) {
+        await query('ALTER TABLE conversation_messages ADD COLUMN feedback_reason TEXT');
+        console.log('✓ Added feedback_reason column to conversation_messages table');
+      }
+    } catch (error: any) {
+      console.log('Feedback reason column check:', error.message);
     }
 
     console.log('Content tables initialized');

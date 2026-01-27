@@ -13,8 +13,12 @@ export async function POST(
     const formData = await req.formData();
     const audioFile = formData.get('audio') as File;
 
-    if (!audioFile) {
+    if (!audioFile || typeof (audioFile as File).size !== 'number') {
       return NextResponse.json({ error: 'No audio file provided' }, { status: 400 });
+    }
+    const file = audioFile as File;
+    if (file.size === 0) {
+      return NextResponse.json({ error: 'Audio file is empty' }, { status: 400 });
     }
 
     // Verify session belongs to user
@@ -32,7 +36,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    const audioBlob = new Blob([await audioFile.arrayBuffer()], { type: audioFile.type });
+    const audioBlob = new Blob([await file.arrayBuffer()], { type: file.type || 'audio/webm' });
     const audioUrl = await uploadSessionAudio(parseInt(sessionId), audioBlob);
 
     if (audioUrl) {

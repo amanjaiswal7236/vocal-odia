@@ -8,13 +8,19 @@ export async function PUT(
 ) {
   try {
     requireAdmin(req);
-    const { title, description, icon, prompt, image, temperature, topP, topK, maxOutputTokens } = await req.json();
+    const { title, description, icon, prompt, image, temperature, topP, topK, maxOutputTokens, category_id, categoryId } = await req.json();
     const { id } = await params;
+    const catId = category_id ?? categoryId;
     
     // Build dynamic update query
     const updates = ['title = $1', 'description = $2', 'icon = $3', 'prompt = $4', 'updated_at = CURRENT_TIMESTAMP'];
     const values = [title, description, icon, prompt];
     let paramIndex = 5;
+    
+    if (catId !== undefined) {
+      updates.push(`category_id = $${paramIndex++}`);
+      values.push(catId === null || catId === '' ? null : (typeof catId === 'number' ? catId : parseInt(String(catId), 10)));
+    }
     
     // Add optional columns
     if (image !== undefined) {

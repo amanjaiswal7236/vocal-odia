@@ -1,0 +1,24 @@
+[Unit]
+Description=VocalOdia Next.js Application
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/vocal-odia
+Environment=NODE_ENV=production
+Environment=PORT=3003
+EnvironmentFile=/home/ubuntu/vocal-odia/.env
+ExecStart=/home/ubuntu/vocal-odia/node_modules/.bin/next start -p 3003
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vocal-odia
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

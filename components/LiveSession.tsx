@@ -7,6 +7,7 @@ import { Scenario, TranscriptionItem } from '@/types';
 import { decode, decodeAudioData, createBlob } from '@/lib/utils/audioUtils';
 import { encodeAudioBuffersToWav } from '@/lib/utils/audioEncoder';
 import { createAudioRecorder, uploadSessionAudio } from '@/lib/services/audioRecordingService';
+import { contentService } from '@/lib/services/contentService';
 import VoiceVisualizer from './VoiceVisualizer';
 import { useToast } from '@/components/Toast';
 import { getErrorMessage } from '@/lib/utils/errorHandler';
@@ -43,7 +44,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
       const token = localStorage.getItem('token');
       if (!token) return;
       
-      const response = await fetch(`/api/content/sessions/${sessionIdRef.current}/messages/create`, {
+      const response = await fetch(`/api/content/sessions/${sessionIdRef.current}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -66,9 +67,6 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
     return null;
   };
   const [showDescription, setShowDescription] = useState(true);
-  const [descriptionText, setDescriptionText] = useState<string>('');
-  const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
-  const [isSpeakingDescription, setIsSpeakingDescription] = useState(false);
   const [conversationStarted, setConversationStarted] = useState(false);
   const [aiHasSpokenFirst, setAiHasSpokenFirst] = useState(false);
   const [isWaitingForAiGreeting, setIsWaitingForAiGreeting] = useState(false);
@@ -76,18 +74,12 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
   const isPausedRef = useRef(false); // Use ref to avoid stale closures in callbacks
   const [isSaving, setIsSaving] = useState(false); // Track saving state to prevent multiple clicks
   
-  // Hyperparameters state
-  const [showSettings, setShowSettings] = useState(false);
-  const [temperature, setTemperature] = useState<number>(0.7);
-  const [topP, setTopP] = useState<number>(0.95);
-  const [topK, setTopK] = useState<number>(40);
-  const [maxOutputTokens, setMaxOutputTokens] = useState<number>(8192);
-  const descriptionAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
-  const descriptionSpeechSynthesisRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const hasSpokenDescriptionRef = useRef(false);
-  const descriptionAudioContextRef = useRef<AudioContext | null>(null); // Separate audio context for description
+  // Feedback during conversation (thumbs on AI messages only)
+  const [feedbackModal, setFeedbackModal] = useState<{ open: boolean; messageId: string | null; messageIndex: number }>({ open: false, messageId: null, messageIndex: -1 });
+  const [feedbackReasonDraft, setFeedbackReasonDraft] = useState('');
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  
   const isGeneratingRef = useRef(false); // Additional guard to prevent multiple calls
-  const descriptionTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Timeout to ensure button appears
   const micInputEnabledRef = useRef(false); // Control when microphone input is sent
   const isWaitingForAiGreetingRef = useRef(false); // Use ref to avoid stale closures
   const wasMicEnabledBeforePause = useRef(false); // Remember mic state before pause
@@ -262,7 +254,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
         formData.append('sender', 'ai');
         formData.append('messageIndex', messageIndex.toString());
 
-        fetch(`/api/content/sessions/${sessionIdRef.current}/messages/audio`, {
+        fetch(`/api/content/sessions/${sessionIdRef.current}/messages`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`
@@ -329,6 +321,48 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
     } catch (err) {
       console.error('Error updating message audio URL:', err);
     }
+  };
+
+  const submitFeedback = async (messageId: string, feedback: 'up' | 'down', reason?: string) => {
+    const sid = sessionIdRef.current;
+    if (!sid) return;
+    try {
+      setSubmittingFeedback(true);
+      await contentService.submitMessageFeedback(sid, messageId, feedback, reason);
+      updateTranscriptions(prev =>
+        prev.map((m, idx) =>
+          m.id === messageId && m.sender === 'ai'
+            ? { ...m, feedback, feedbackReason: feedback === 'down' ? (reason ?? null) : null }
+            : m
+        )
+      );
+      showToast(feedback === 'up' ? 'Thanks for your feedback!' : 'Feedback recorded.', 'success');
+    } catch (err) {
+      showToast(getErrorMessage(err), 'error');
+    } finally {
+      setSubmittingFeedback(false);
+      setFeedbackModal({ open: false, messageId: null, messageIndex: -1 });
+      setFeedbackReasonDraft('');
+    }
+  };
+
+  const handleThumbsUp = (t: TranscriptionItem) => {
+    if (!t.id || t.sender !== 'ai') return;
+    submitFeedback(t.id, 'up');
+  };
+
+  const handleThumbsDown = (t: TranscriptionItem, index: number) => {
+    if (!t.id || t.sender !== 'ai') return;
+    setFeedbackReasonDraft('');
+    setFeedbackModal({ open: true, messageId: t.id, messageIndex: index });
+  };
+
+  const handleFeedbackModalSubmit = () => {
+    if (feedbackModal.messageId) submitFeedback(feedbackModal.messageId, 'down', feedbackReasonDraft.trim() || undefined);
+  };
+
+  const handleFeedbackModalSkip = () => {
+    if (feedbackModal.messageId) submitFeedback(feedbackModal.messageId, 'down');
   };
 
   const initializeAudio = async () => {
@@ -487,8 +521,12 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
             }
 
             // 2. TRANSCRIPTION LOGIC - Real-time updates
+            // When AI speaks, user turn is over: clear user buffer so next user speech starts a new message
             const outputText = message.serverContent?.outputTranscription?.text;
             if (outputText) {
+              currentInputTranscription.current = '';
+              currentUserMessageIndexRef.current = null;
+
               // Check if this is the start of a NEW AI message (no current output transcription)
               const isNewAiMessage = currentOutputTranscription.current.length === 0;
               
@@ -532,6 +570,9 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
             
             const inputText = message.serverContent?.inputTranscription?.text;
             if (inputText) {
+              // When user speaks, AI turn is over: clear AI buffer so next AI speech starts a new message (avoids appending into previous AI bubble)
+              currentOutputTranscription.current = '';
+
               // Start recording user audio when they start speaking
               if (!isRecordingUserAudioRef.current && streamRef.current && userAudioRecorderRef.current === null) {
                 const userRecorder = createAudioRecorder(streamRef.current);
@@ -818,7 +859,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
                       formData.append('sender', 'user');
                       formData.append('messageIndex', messageIndex.toString());
                       
-                      fetch(`/api/content/sessions/${sessionIdRef.current}/messages/audio`, {
+                      fetch(`/api/content/sessions/${sessionIdRef.current}/messages`, {
                         method: 'POST',
                         headers: {
                           'Authorization': `Bearer ${token}`
@@ -902,6 +943,13 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
                 if (messageId) {
                   messageIdMapRef.current.set(messageIndex, messageId);
                   console.log(`[turnComplete] Saved AI message to DB with messageId: ${messageId} at index ${messageIndex}`);
+                  updateTranscriptions(prev => {
+                    const u = [...prev];
+                    if (u[messageIndex] && u[messageIndex].sender === 'ai') {
+                      u[messageIndex] = { ...u[messageIndex], id: String(messageId) };
+                    }
+                    return u;
+                  });
                 }
                 
                 // Finalize AI audio (clean pipeline)
@@ -948,12 +996,12 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
           },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
-          // Hyperparameters: use scenario-specific values if available, otherwise use state values
+          // Hyperparameters: use scenario values (set by admin); defaults if not set
           generationConfig: {
-            temperature: scenario.temperature ?? temperature,
-            topP: scenario.topP ?? topP,
-            topK: scenario.topK ?? topK,
-            maxOutputTokens: scenario.maxOutputTokens ?? maxOutputTokens
+            temperature: scenario.temperature ?? 0.7,
+            topP: scenario.topP ?? 0.95,
+            topK: scenario.topK ?? 40,
+            maxOutputTokens: scenario.maxOutputTokens ?? 8192
           }
         }
       });
@@ -1003,459 +1051,16 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
     }
   }, [scenario, showToast]);
 
-  // Cleanup function to stop any ongoing description audio
-  const stopDescriptionAudio = () => {
-    // Clear timeout
-    if (descriptionTimeoutRef.current) {
-      clearTimeout(descriptionTimeoutRef.current);
-      descriptionTimeoutRef.current = null;
-    }
-    
-    // Stop AudioBufferSourceNode if playing
-    if (descriptionAudioSourceRef.current) {
-      try {
-        descriptionAudioSourceRef.current.stop();
-        descriptionAudioSourceRef.current.disconnect();
-      } catch (e) {
-        // Already stopped
-      }
-      descriptionAudioSourceRef.current = null;
-    }
-    
-    // Close description audio context
-    if (descriptionAudioContextRef.current) {
-      try {
-        descriptionAudioContextRef.current.close();
-      } catch (e) {
-        // Already closed
-      }
-      descriptionAudioContextRef.current = null;
-    }
-    
-    // Stop SpeechSynthesis if playing
-    if ('speechSynthesis' in window) {
-      speechSynthesis.cancel();
-      descriptionSpeechSynthesisRef.current = null;
-    }
-    
-    setIsSpeakingDescription(false);
-  };
-
-  // Generate and speak AI description of the scenario
-  useEffect(() => {
-    console.log('Description useEffect triggered:', {
-      showDescription,
-      descriptionText: !!descriptionText,
-      isGeneratingDescription,
-      hasSpokenDescription: hasSpokenDescriptionRef.current,
-      isGenerating: isGeneratingRef.current
-    });
-    
-    // Only generate once when component mounts and showDescription is true
-    if (showDescription && !hasSpokenDescriptionRef.current) {
-      // Set a fallback description immediately so button can appear
-      if (!descriptionText) {
-        const fallbackText = `Welcome to ${scenario.title}! ${scenario.description || 'This scenario will help you practice your English conversation skills.'}`;
-        console.log('Setting immediate fallback description:', fallbackText);
-        setDescriptionText(fallbackText);
-      }
-      
-      // Generate AI description and speak it
-      if (!isGeneratingDescription && !isGeneratingRef.current) {
-        console.log('Calling generateDescription');
-        generateDescription();
-      }
-    }
-    
-    // Cleanup on unmount
-    return () => {
-      if (descriptionTimeoutRef.current) {
-        clearTimeout(descriptionTimeoutRef.current);
-        descriptionTimeoutRef.current = null;
-      }
-      stopDescriptionAudio();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showDescription]);
-
-  const generateDescription = async () => {
-    // Prevent multiple calls
-    if (isGeneratingDescription || hasSpokenDescriptionRef.current || isGeneratingRef.current) {
-      console.log('generateDescription: Already generating or spoken, skipping');
-      return;
-    }
-    
-    console.log('generateDescription: Starting...');
-    isGeneratingRef.current = true;
-    setIsGeneratingDescription(true);
-    
-    // Set a timeout to ensure audio stops if it takes too long
-    if (descriptionTimeoutRef.current) {
-      clearTimeout(descriptionTimeoutRef.current);
-    }
-    descriptionTimeoutRef.current = setTimeout(() => {
-      console.log('Description timeout: Stopping audio');
-      setIsSpeakingDescription(false);
-      hasSpokenDescriptionRef.current = true;
-    }, 20000); // 20 second timeout for audio
-    
-    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-    const currentText = descriptionText || `Welcome to ${scenario.title}! ${scenario.description || 'This scenario will help you practice your English conversation skills.'}`;
-    
-    if (!apiKey) {
-      console.log('No API key, speaking existing description');
-      setIsGeneratingDescription(false);
-      isGeneratingRef.current = false;
-      // Try to speak the existing description
-      try {
-        await speakDescription(currentText);
-      } catch (err) {
-        console.error('Error in speakDescription:', err);
-        setIsSpeakingDescription(false);
-      }
-      hasSpokenDescriptionRef.current = true;
-      return;
-    }
-
-    try {
-      console.log('Generating description with AI...');
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash-exp',
-        contents: `You are ${AI_AGENT.NAME}, a friendly English language coach. Describe this scenario to the learner in a warm, encouraging way. Keep it brief (2-3 sentences) and explain what they will practice. Scenario: ${scenario.title}. Description: ${scenario.description}. Prompt: ${scenario.prompt}. Only respond with the description, no additional text.`,
-      });
-      
-      const aiDescription = response.text?.trim();
-      if (aiDescription && aiDescription.length > 0) {
-        console.log('AI description generated:', aiDescription);
-        setDescriptionText(aiDescription);
-        // Wait for audio to finish before marking as complete
-        try {
-          await speakDescription(aiDescription);
-        } catch (err) {
-          console.error('Error speaking AI description:', err);
-          setIsSpeakingDescription(false);
-        }
-      } else {
-        console.log('No AI description, using existing and speaking it');
-        try {
-          await speakDescription(currentText);
-        } catch (err) {
-          console.error('Error speaking existing description:', err);
-          setIsSpeakingDescription(false);
-        }
-      }
-      hasSpokenDescriptionRef.current = true;
-    } catch (error: any) {
-      console.error('Error generating description:', error);
-      // If it's a quota/rate limit error, just use the fallback and speak it
-      const isQuotaError = error?.error?.code === 429 || error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
-      
-      if (isQuotaError) {
-        console.log('Quota exceeded, using fallback description and speaking it');
-      }
-      
-      // Ensure description text is set
-      if (!descriptionText) {
-        setDescriptionText(currentText);
-      }
-      
-      // Speak the existing description
-      try {
-        await speakDescription(currentText);
-      } catch (err) {
-        console.error('Error in speakDescription fallback:', err);
-        setIsSpeakingDescription(false);
-      }
-      hasSpokenDescriptionRef.current = true;
-    } finally {
-      setIsGeneratingDescription(false);
-      isGeneratingRef.current = false;
-    }
-  };
-
-  const speakDescription = async (text: string): Promise<void> => {
-    console.log('speakDescription called with text:', text);
-    
-    // CRITICAL: Stop ALL existing audio first to prevent overlapping
-    stopDescriptionAudio();
-    
-    // Wait a tiny bit to ensure cleanup is complete
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-    if (!apiKey) {
-      console.log('No API key, using browser TTS fallback');
-      // Fallback to browser TTS
-      if ('speechSynthesis' in window) {
-        // Cancel ALL speech synthesis to prevent overlapping
-        speechSynthesis.cancel();
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-IN'; // Indian English
-        utterance.rate = 0.9;
-        utterance.pitch = 1.1; // Slightly higher pitch for female voice
-        
-        // Try to select a female Indian English voice if available
-        const voices = speechSynthesis.getVoices();
-        const indianFemaleVoice = voices.find(voice => 
-          voice.lang.startsWith('en-IN') && 
-          (voice.name.toLowerCase().includes('female') || 
-           voice.name.toLowerCase().includes('priya') ||
-           voice.name.toLowerCase().includes('neural') ||
-           voice.name.toLowerCase().includes('woman') ||
-           voice.name.toLowerCase().includes('girl'))
-        );
-        
-        if (indianFemaleVoice) {
-          utterance.voice = indianFemaleVoice;
-          console.log('Using Indian female voice:', indianFemaleVoice.name);
-        } else {
-          // Fallback: try to find any Indian English voice
-          const indianVoice = voices.find(voice => voice.lang.startsWith('en-IN'));
-          if (indianVoice) {
-            utterance.voice = indianVoice;
-            console.log('Using Indian voice:', indianVoice.name);
-          }
-        }
-        
-        descriptionSpeechSynthesisRef.current = utterance;
-        setIsSpeakingDescription(true);
-        
-        // Return a promise that resolves when speech ends
-        return new Promise<void>((resolve, reject) => {
-          utterance.onend = () => {
-            console.log('Browser TTS ended');
-            setIsSpeakingDescription(false);
-            descriptionSpeechSynthesisRef.current = null;
-            if (descriptionTimeoutRef.current) {
-              clearTimeout(descriptionTimeoutRef.current);
-              descriptionTimeoutRef.current = null;
-            }
-            resolve();
-          };
-          utterance.onerror = (e) => {
-            console.error('Browser TTS error:', e);
-            setIsSpeakingDescription(false);
-            descriptionSpeechSynthesisRef.current = null;
-            if (descriptionTimeoutRef.current) {
-              clearTimeout(descriptionTimeoutRef.current);
-              descriptionTimeoutRef.current = null;
-            }
-            reject(e);
-          };
-          speechSynthesis.speak(utterance);
-          console.log('Browser TTS started');
-        });
-      } else {
-        console.error('Browser TTS not available');
-        setIsSpeakingDescription(false);
-        return Promise.resolve();
-      }
-    }
-
-    try {
-      console.log('Attempting Gemini TTS...');
-      setIsSpeakingDescription(true);
-      const ai = new GoogleGenAI({ apiKey });
-      
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-preview-tts',
-        contents: [{ parts: [{ text: text }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'aoede' } }
-          }
-        },
-      });
-
-      console.log('Gemini TTS response received');
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (base64Audio) {
-        console.log('Audio data received, length:', base64Audio.length);
-        // Create a separate audio context for description to avoid conflicts with conversation audio
-        if (!descriptionAudioContextRef.current || descriptionAudioContextRef.current.state === 'closed') {
-          descriptionAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-          console.log('Created new audio context for description');
-        }
-        const ctx = descriptionAudioContextRef.current;
-        
-        // Resume audio context if suspended (required for autoplay policies)
-        if (ctx.state === 'suspended') {
-          console.log('Resuming suspended audio context');
-          await ctx.resume();
-        }
-
-        const audioBuffer = await decodeAudioData(decode(base64Audio), ctx, 24000, 1);
-        console.log('Audio buffer decoded, duration:', audioBuffer.duration, 'seconds');
-        
-        // Return a promise that resolves when audio playback ends
-        return new Promise<void>((resolve, reject) => {
-          const source = ctx.createBufferSource();
-          source.buffer = audioBuffer;
-          source.connect(ctx.destination);
-          
-          // Store reference for cleanup
-          descriptionAudioSourceRef.current = source;
-          
-          source.onended = () => {
-            console.log('Description audio playback ended - setting isSpeakingDescription to false');
-            setIsSpeakingDescription(false);
-            descriptionAudioSourceRef.current = null;
-            if (descriptionTimeoutRef.current) {
-              clearTimeout(descriptionTimeoutRef.current);
-              descriptionTimeoutRef.current = null;
-            }
-            console.log('Resolving speakDescription promise');
-            resolve();
-          };
-          
-          // Handle errors by wrapping start() in try-catch
-          try {
-            console.log('Starting audio playback');
-            source.start(0);
-          } catch (error) {
-            console.error('Description audio playback error:', error);
-            setIsSpeakingDescription(false);
-            descriptionAudioSourceRef.current = null;
-            if (descriptionTimeoutRef.current) {
-              clearTimeout(descriptionTimeoutRef.current);
-              descriptionTimeoutRef.current = null;
-            }
-            // Fallback to browser TTS on error
-            if ('speechSynthesis' in window) {
-              console.log('Falling back to browser TTS due to audio playback error');
-              speechSynthesis.cancel();
-              const utterance = new SpeechSynthesisUtterance(text);
-              utterance.lang = 'en-US';
-              utterance.rate = 0.9;
-              descriptionSpeechSynthesisRef.current = utterance;
-              setIsSpeakingDescription(true);
-              utterance.onend = () => {
-                setIsSpeakingDescription(false);
-                descriptionSpeechSynthesisRef.current = null;
-                resolve();
-              };
-              utterance.onerror = () => {
-                setIsSpeakingDescription(false);
-                descriptionSpeechSynthesisRef.current = null;
-                reject(new Error('Browser TTS error'));
-              };
-              speechSynthesis.speak(utterance);
-            } else {
-              reject(error);
-            }
-          }
-        });
-      } else {
-        console.warn('No audio data in response, falling back to browser TTS');
-        // Fallback to browser TTS
-        if ('speechSynthesis' in window) {
-          speechSynthesis.cancel();
-          await new Promise(resolve => setTimeout(resolve, 50));
-          
-          const utterance = new SpeechSynthesisUtterance(text);
-          utterance.lang = 'en-US';
-          utterance.rate = 0.9;
-          descriptionSpeechSynthesisRef.current = utterance;
-          setIsSpeakingDescription(true);
-          
-          return new Promise<void>((resolve, reject) => {
-            utterance.onend = () => {
-              setIsSpeakingDescription(false);
-              descriptionSpeechSynthesisRef.current = null;
-              if (descriptionTimeoutRef.current) {
-                clearTimeout(descriptionTimeoutRef.current);
-                descriptionTimeoutRef.current = null;
-              }
-              resolve();
-            };
-            utterance.onerror = () => {
-              setIsSpeakingDescription(false);
-              descriptionSpeechSynthesisRef.current = null;
-              if (descriptionTimeoutRef.current) {
-                clearTimeout(descriptionTimeoutRef.current);
-                descriptionTimeoutRef.current = null;
-              }
-              reject(new Error('Browser TTS error'));
-            };
-            speechSynthesis.speak(utterance);
-          });
-        } else {
-          setIsSpeakingDescription(false);
-          if (descriptionTimeoutRef.current) {
-            clearTimeout(descriptionTimeoutRef.current);
-            descriptionTimeoutRef.current = null;
-          }
-          return Promise.resolve();
-        }
-      }
-    } catch (error) {
-      console.error('Error speaking description with Gemini TTS:', error);
-      // Fallback to browser TTS
-      if ('speechSynthesis' in window) {
-        console.log('Falling back to browser TTS due to error');
-        speechSynthesis.cancel();
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US';
-        utterance.rate = 0.9;
-        descriptionSpeechSynthesisRef.current = utterance;
-        setIsSpeakingDescription(true);
-        
-        return new Promise<void>((resolve, reject) => {
-          utterance.onend = () => {
-            setIsSpeakingDescription(false);
-            descriptionSpeechSynthesisRef.current = null;
-            if (descriptionTimeoutRef.current) {
-              clearTimeout(descriptionTimeoutRef.current);
-              descriptionTimeoutRef.current = null;
-            }
-            resolve();
-          };
-          utterance.onerror = (e) => {
-            console.error('Browser TTS error in fallback:', e);
-            setIsSpeakingDescription(false);
-            descriptionSpeechSynthesisRef.current = null;
-            if (descriptionTimeoutRef.current) {
-              clearTimeout(descriptionTimeoutRef.current);
-              descriptionTimeoutRef.current = null;
-            }
-            reject(e);
-          };
-          speechSynthesis.speak(utterance);
-        });
-      } else {
-        setIsSpeakingDescription(false);
-        if (descriptionTimeoutRef.current) {
-          clearTimeout(descriptionTimeoutRef.current);
-          descriptionTimeoutRef.current = null;
-        }
-        return Promise.resolve();
-      }
-    }
-  };
-
   const handleStartConversation = () => {
-    // Stop any description audio before starting conversation
-    stopDescriptionAudio();
-    
-    // Small delay to ensure audio is fully stopped
-    setTimeout(() => {
-      setShowDescription(false);
-      setConversationStarted(true);
-      startSession();
-    }, 100);
+    setShowDescription(false);
+    setConversationStarted(true);
+    startSession();
   };
+
 
   useEffect(() => {
     if (conversationStarted) {
       return () => {
-        // Stop description audio when conversation starts
-        stopDescriptionAudio();
         sessionRef.current?.close();
         streamRef.current?.getTracks().forEach(t => t.stop());
         audioContextRef.current?.close();
@@ -1470,13 +1075,6 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
       chatEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [transcriptions]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      stopDescriptionAudio();
-    };
-  }, []);
 
   const handlePause = () => {
     setIsPaused(true);
@@ -1669,117 +1267,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
             </span>
             <h2 className="text-xl font-bold">{scenario.title}</h2>
           </div>
-          <button 
-            onClick={() => setShowSettings(!showSettings)} 
-            className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors flex items-center gap-2 px-4"
-            title="Model Settings"
-          >
-            <span className="text-xs font-bold uppercase">Settings</span>
-            <i className={`fas fa-cog ${showSettings ? 'fa-spin' : ''}`}></i>
-          </button>
         </div>
-        
-        {/* Settings Panel */}
-        {showSettings && (
-          <div className="mx-6 mt-4 bg-white border border-gray-200 rounded-lg shadow-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-900">Model Hyperparameters</h3>
-              <button 
-                onClick={() => setShowSettings(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <i className="fas fa-times"></i>
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Temperature */}
-              <div className="space-y-2">
-                <label className="flex items-center justify-between text-sm font-medium text-gray-700">
-                  <span>Temperature</span>
-                  <span className="text-gray-500">{temperature.toFixed(2)}</span>
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="2"
-                  step="0.1"
-                  value={temperature}
-                  onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
-                />
-                <p className="text-xs text-gray-500">Lower values (0.1-0.5) = more deterministic, Higher values (1.0-2.0) = more creative</p>
-              </div>
-              
-              {/* Top P */}
-              <div className="space-y-2">
-                <label className="flex items-center justify-between text-sm font-medium text-gray-700">
-                  <span>Top P (Nucleus Sampling)</span>
-                  <span className="text-gray-500">{topP.toFixed(2)}</span>
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={topP}
-                  onChange={(e) => setTopP(parseFloat(e.target.value))}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
-                />
-                <p className="text-xs text-gray-500">Lower values (0.1-0.5) = more focused, Higher values (0.9-1.0) = more diverse</p>
-              </div>
-              
-              {/* Top K */}
-              <div className="space-y-2">
-                <label className="flex items-center justify-between text-sm font-medium text-gray-700">
-                  <span>Top K</span>
-                  <span className="text-gray-500">{topK}</span>
-                </label>
-                <input
-                  type="range"
-                  min="1"
-                  max="100"
-                  step="1"
-                  value={topK}
-                  onChange={(e) => setTopK(parseInt(e.target.value))}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
-                />
-                <p className="text-xs text-gray-500">Number of top tokens to consider. Lower = more deterministic</p>
-              </div>
-              
-              {/* Max Output Tokens */}
-              <div className="space-y-2">
-                <label className="flex items-center justify-between text-sm font-medium text-gray-700">
-                  <span>Max Output Tokens</span>
-                  <span className="text-gray-500">{maxOutputTokens}</span>
-                </label>
-                <input
-                  type="range"
-                  min="256"
-                  max="8192"
-                  step="256"
-                  value={maxOutputTokens}
-                  onChange={(e) => setMaxOutputTokens(parseInt(e.target.value))}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
-                />
-                <p className="text-xs text-gray-500">Maximum length of AI responses</p>
-              </div>
-            </div>
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <button
-                onClick={() => {
-                  setTemperature(0.1);
-                  setTopP(0.3);
-                  setTopK(10);
-                  setMaxOutputTokens(8192);
-                }}
-                className="text-sm text-green-600 hover:text-green-700 font-medium"
-              >
-                <i className="fas fa-undo mr-2"></i>
-                Reset to Low Temperature (More Deterministic)
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Image and Description */}
         <div className="flex-1 overflow-y-auto p-8 flex flex-col items-center justify-center gap-8 bg-gradient-to-br from-gray-50 to-white">
@@ -1809,89 +1297,17 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
                 <div className="flex-1">
                   <h3 className="text-xl font-bold text-gray-900 mb-3">{scenario.title}</h3>
                   <p className="text-gray-600 mb-4 leading-relaxed">{scenario.description}</p>
-                  
-                  {isGeneratingDescription ? (
-                    <div className="flex items-center gap-3 text-green-600">
-                      <i className="fas fa-circle-notch fa-spin"></i>
-                      <p className="text-sm font-medium">{AI_AGENT.NAME} is preparing your scenario...</p>
-                    </div>
-                  ) : descriptionText ? (
-                    <div className="bg-green-50 rounded-xl p-6 border-l-4 border-green-500">
-                      <div className="flex items-start gap-3">
-                        <div className={`w-8 h-8 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0 ${isSpeakingDescription ? 'animate-pulse' : ''}`}>
-                          <i className={`fas ${isSpeakingDescription ? 'fa-volume-up' : 'fa-brain'} text-white text-sm`}></i>
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-bold text-green-900 mb-2">
-                            {AI_AGENT.NAME} {isSpeakingDescription ? 'is speaking...' : 'says:'}
-                          </p>
-                          <p className="text-gray-700 leading-relaxed">{descriptionText}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
                 </div>
               </div>
             </div>
 
-            {/* Show start button - always available, with skip option while speaking */}
-            {(() => {
-              console.log('Button render check:', {
-                descriptionText: !!descriptionText,
-                isSpeakingDescription,
-                isGeneratingDescription,
-                hasSpokenDescription: hasSpokenDescriptionRef.current
-              });
-              
-              if (descriptionText) {
-                if (!isSpeakingDescription) {
-                  return (
-                    <button
-                      onClick={handleStartConversation}
-                      className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold py-4 px-8 rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 flex items-center justify-center gap-3 text-lg"
-                    >
-                      <i className="fas fa-play-circle"></i>
-                      <span>Start Conversation</span>
-                    </button>
-                  );
-                } else {
-                  return (
-                    <div className="w-full space-y-3">
-                      <div className="bg-green-100 text-green-700 font-medium py-4 px-8 rounded-2xl flex items-center justify-center gap-3">
-                        <i className="fas fa-volume-up animate-pulse"></i>
-                        <span>Listening to {AI_AGENT.NAME}...</span>
-                      </div>
-                      <button
-                        onClick={handleStartConversation}
-                        className="w-full bg-gray-500 text-white font-medium py-3 px-6 rounded-xl hover:bg-gray-600 transition-all flex items-center justify-center gap-2 text-sm"
-                      >
-                        <i className="fas fa-forward"></i>
-                        <span>Skip & Start Conversation</span>
-                      </button>
-                    </div>
-                  );
-                }
-              } else {
-                return (
-                  <div className="w-full space-y-3">
-                    {isGeneratingDescription ? (
-                      <div className="bg-green-100 text-green-700 font-medium py-4 px-8 rounded-2xl flex items-center justify-center gap-3">
-                        <i className="fas fa-circle-notch fa-spin"></i>
-                        <span>Preparing scenario...</span>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={handleStartConversation}
-                        className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold py-4 px-8 rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 flex items-center justify-center gap-3 text-lg"
-                      >
-                        <i className="fas fa-play-circle"></i>
-                        <span>Start Conversation</span>
-                      </button>
-                    )}
-                  </div>
-                );
-              }
-            })()}
+            <button
+              onClick={handleStartConversation}
+              className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold py-4 px-8 rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 flex items-center justify-center gap-3 text-lg"
+            >
+              <i className="fas fa-play-circle"></i>
+              <span>Start Conversation</span>
+            </button>
           </div>
         </div>
       </div>
@@ -1910,14 +1326,6 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
           <h2 className="text-xl font-bold">{scenario.title}</h2>
         </div>
         <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setShowSettings(!showSettings)} 
-            className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors flex items-center gap-2 px-4"
-            title="Model Settings"
-          >
-            <span className="text-xs font-bold uppercase">Settings</span>
-            <i className={`fas fa-cog ${showSettings ? 'fa-spin' : ''}`}></i>
-          </button>
           {isPaused ? (
             <button 
               onClick={handleResume} 
@@ -1951,109 +1359,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
           </button>
         </div>
       </div>
-      
-      {/* Settings Panel */}
-      {showSettings && (
-        <div className="mx-6 mt-4 bg-white border border-gray-200 rounded-lg shadow-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-gray-900">Model Hyperparameters</h3>
-            <button 
-              onClick={() => setShowSettings(false)}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <i className="fas fa-times"></i>
-            </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Temperature */}
-            <div className="space-y-2">
-              <label className="flex items-center justify-between text-sm font-medium text-gray-700">
-                <span>Temperature</span>
-                <span className="text-gray-500">{temperature.toFixed(2)}</span>
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="2"
-                step="0.1"
-                value={temperature}
-                onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
-              />
-              <p className="text-xs text-gray-500">Lower values (0.1-0.5) = more deterministic, Higher values (1.0-2.0) = more creative</p>
-            </div>
-            
-            {/* Top P */}
-            <div className="space-y-2">
-              <label className="flex items-center justify-between text-sm font-medium text-gray-700">
-                <span>Top P (Nucleus Sampling)</span>
-                <span className="text-gray-500">{topP.toFixed(2)}</span>
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={topP}
-                onChange={(e) => setTopP(parseFloat(e.target.value))}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
-              />
-              <p className="text-xs text-gray-500">Lower values (0.1-0.5) = more focused, Higher values (0.9-1.0) = more diverse</p>
-            </div>
-            
-            {/* Top K */}
-            <div className="space-y-2">
-              <label className="flex items-center justify-between text-sm font-medium text-gray-700">
-                <span>Top K</span>
-                <span className="text-gray-500">{topK}</span>
-              </label>
-              <input
-                type="range"
-                min="1"
-                max="100"
-                step="1"
-                value={topK}
-                onChange={(e) => setTopK(parseInt(e.target.value))}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
-              />
-              <p className="text-xs text-gray-500">Number of top tokens to consider. Lower = more deterministic</p>
-            </div>
-            
-            {/* Max Output Tokens */}
-            <div className="space-y-2">
-              <label className="flex items-center justify-between text-sm font-medium text-gray-700">
-                <span>Max Output Tokens</span>
-                <span className="text-gray-500">{maxOutputTokens}</span>
-              </label>
-              <input
-                type="range"
-                min="256"
-                max="8192"
-                step="256"
-                value={maxOutputTokens}
-                onChange={(e) => setMaxOutputTokens(parseInt(e.target.value))}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
-              />
-              <p className="text-xs text-gray-500">Maximum length of AI responses</p>
-            </div>
-          </div>
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <button
-              onClick={() => {
-                setTemperature(0.1);
-                setTopP(0.3);
-                setTopK(10);
-                setMaxOutputTokens(8192);
-              }}
-              className="text-sm text-green-600 hover:text-green-700 font-medium"
-            >
-              <i className="fas fa-undo mr-2"></i>
-              Reset to Low Temperature (More Deterministic)
-            </button>
-          </div>
-        </div>
-      )}
-      
+
       {/* AI Speaking First Indicator */}
       {isWaitingForAiGreeting && (
         <div className="mx-6 mt-4 bg-green-50 border-l-4 border-green-500 p-4 rounded-lg">
@@ -2090,10 +1396,36 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
         )}
         
         {transcriptions.map((t, i) => (
-          <div key={i} className={`flex ${t.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div key={t.id ?? i} className={`flex ${t.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[80%] p-4 rounded-2xl shadow-sm ${t.sender === 'user' ? 'bg-green-600 text-white rounded-tr-none' : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none'}`}>
               <p className="text-sm font-medium mb-1 opacity-70">{t.sender === 'user' ? 'You' : AI_AGENT.NAME}</p>
               <p className="leading-relaxed">{t.text}</p>
+              {t.sender === 'ai' && t.id && (
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); handleThumbsUp(t); }}
+                    className={`p-1.5 rounded-full transition-colors ${
+                      t.feedback === 'up' ? 'bg-gray-200 text-gray-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+                    }`}
+                    title="Thumbs up"
+                    aria-label="Thumbs up"
+                  >
+                    <i className={`${t.feedback === 'up' ? 'fas' : 'far'} fa-thumbs-up text-sm`}></i>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); handleThumbsDown(t, i); }}
+                    className={`p-1.5 rounded-full transition-colors ${
+                      t.feedback === 'down' ? 'bg-gray-200 text-gray-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+                    }`}
+                    title="Thumbs down"
+                    aria-label="Thumbs down"
+                  >
+                    <i className={`${t.feedback === 'down' ? 'fas' : 'far'} fa-thumbs-down text-sm`}></i>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -2132,6 +1464,53 @@ const LiveSession: React.FC<LiveSessionProps> = ({ scenario, courseId, onEnd }) 
            "You can speak now..."}
         </p>
       </div>
+
+      {/* Thumbs-down feedback reason modal (during conversation) */}
+      {feedbackModal.open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => !submittingFeedback && setFeedbackModal({ open: false, messageId: null, messageIndex: -1 })}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="live-feedback-modal-title"
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="live-feedback-modal-title" className="text-lg font-bold text-gray-900 mb-2">
+              Why wasn&apos;t this helpful?
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">Your feedback is optional. You can skip and continue.</p>
+            <textarea
+              value={feedbackReasonDraft}
+              onChange={(e) => setFeedbackReasonDraft(e.target.value)}
+              placeholder="e.g. Pronunciation was unclear, response was too long..."
+              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
+              rows={3}
+              disabled={submittingFeedback}
+            />
+            <div className="flex gap-3 mt-4">
+              <button
+                type="button"
+                onClick={handleFeedbackModalSubmit}
+                disabled={submittingFeedback}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-green-600 text-white font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors"
+              >
+                {submittingFeedback ? 'Saving…' : 'Submit'}
+              </button>
+              <button
+                type="button"
+                onClick={handleFeedbackModalSkip}
+                disabled={submittingFeedback}
+                className="flex-1 py-2.5 px-4 rounded-xl border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              >
+                Continue without reason
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -5,6 +5,11 @@ const nextConfig: NextConfig = {
   env: {
     // Make sure environment variables are available
   },
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "50mb",
+    },
+  },
 };
 
 export default nextConfig;
