@@ -144,7 +144,8 @@ export default function VoiceInputPanel({
             }
             const fcList = message.toolCall?.functionCalls;
             if (fcList) {
-              const sendResponse = (fc: { id: string; name: string }, result: string) => {
+              const sendResponse = (fc: { id?: string; name?: string }, result: string) => {
+                if (!fc.id || !fc.name) return;
                 sessionPromiseRef.current?.then((s: unknown) => {
                   const sess = s as { sendToolResponse?: (x: unknown) => void };
                   sess?.sendToolResponse?.({ functionResponses: [{ id: fc.id, name: fc.name, response: { result } }] });
@@ -217,24 +218,23 @@ export default function VoiceInputPanel({
         </button>
       </div>
       <div className="flex items-center gap-2">
-        {status === 'DISCONNECTED' || status === 'ERROR' ? (
+        {status === 'CONNECTING' ? (
+          <button
+            type="button"
+            disabled
+            className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white opacity-50"
+          >
+            <i className="fas fa-spinner fa-spin"></i>
+            Connecting…
+          </button>
+        ) : status === 'DISCONNECTED' || status === 'ERROR' ? (
           <button
             type="button"
             onClick={connect}
-            disabled={status === 'CONNECTING'}
-            className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+            className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
           >
-            {status === 'CONNECTING' ? (
-              <>
-                <i className="fas fa-spinner fa-spin"></i>
-                Connecting…
-              </>
-            ) : (
-              <>
-                <i className="fas fa-microphone"></i>
-                Connect
-              </>
-            )}
+            <i className="fas fa-microphone"></i>
+            Connect
           </button>
         ) : (
           <button
@@ -248,6 +248,7 @@ export default function VoiceInputPanel({
         )}
       </div>
       <p className="mt-2 text-xs text-gray-500">
+        {status === 'CONNECTING' && 'Connecting…'}
         {status === 'CONNECTED' && (isSpeaking ? 'Speaking…' : 'Listening. Say "undo", "save", or dictate.')}
         {status === 'ERROR' && 'Connection failed. Try again.'}
         {status === 'DISCONNECTED' && 'Connect to use voice.'}
