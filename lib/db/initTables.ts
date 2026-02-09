@@ -327,6 +327,19 @@ export const initContentTables = async () => {
       console.log('Feedback reason column check:', error.message);
     }
 
+    // User documents table (Echo Writer–style free-form voice practice, per user)
+    await query(`
+      CREATE TABLE IF NOT EXISTS user_documents (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL DEFAULT 'Untitled Document',
+        paragraphs JSONB NOT NULL DEFAULT '[]',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✓ User documents table created/verified');
+
     console.log('Content tables initialized');
   } catch (error) {
     console.error('Error initializing content tables:', error);

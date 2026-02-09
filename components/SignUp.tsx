@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { authService } from '@/lib/services/authService';
 import { useToast } from '@/components/Toast';
 import { getErrorMessage } from '@/lib/utils/errorHandler';
+import { APP_CONFIG } from '@/lib/constants';
 
 interface SignUpProps {
   onSuccess: () => void;
@@ -43,8 +44,8 @@ const SignUp: React.FC<SignUpProps> = ({ onSuccess, onSwitchToSignIn }) => {
           <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <i className="fas fa-graduation-cap text-3xl"></i>
           </div>
-          <h2 className="text-2xl font-black mb-2">Join VocalOdia</h2>
-          <p className="text-slate-200 text-sm">Start your English learning journey</p>
+          <h2 className="text-2xl font-black mb-2">Join {APP_CONFIG.NAME}</h2>
+          <p className="text-slate-200 text-sm">Start your voice practice journey</p>
         </div>
 
         <div className="p-8">

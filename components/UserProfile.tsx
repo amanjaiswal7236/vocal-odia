@@ -112,7 +112,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack }) => {
           {/* Mistake Bank */}
           <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">
             <h3 className="font-bold text-lg text-gray-900 mb-6 flex items-center gap-2">
-              <i className="fas fa-shield-virus text-green-600"></i> Odinglish Mistake Bank
+              <i className="fas fa-shield-virus text-green-600"></i> Phrase Tips
             </h3>
             <div className="space-y-4">
               <div className="p-4 bg-red-50/50 rounded-2xl border border-red-100">

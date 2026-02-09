@@ -1,6 +1,7 @@
 {
-  "name": "odia-english-voice-tutor-nextjs",
+  "name": "vocal-voice-tutor",
   "version": "0.1.0",
+  "description": "AI-powered voice practice and language learning platform",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",

@@ -29,7 +29,7 @@ export async function GET() {
     return NextResponse.json({ 
       success: true, 
       message: 'Database initialized successfully',
-      tables: ['users', 'scenarios', 'daily_nuggets', 'courses', 'modules', 'lessons', 'badges', 'quests', 'user_sessions', 'user_lesson_progress', 'shadowing_tasks']
+      tables: ['users', 'scenarios', 'daily_nuggets', 'courses', 'modules', 'lessons', 'badges', 'quests', 'user_sessions', 'user_lesson_progress', 'shadowing_tasks', 'user_documents']
     });
   } catch (error: any) {
     console.error('Database initialization error:', error);

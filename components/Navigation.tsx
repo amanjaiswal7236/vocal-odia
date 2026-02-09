@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useAppContext } from '@/lib/context/AppContext';
 import { authService } from '@/lib/services/authService';
+import { APP_CONFIG } from '@/lib/constants';
 import { useToast } from '@/components/Toast';
 import { useOffline } from '@/lib/hooks/useOffline';
 import { useEffect } from 'react';
@@ -52,11 +53,21 @@ export default function Navigation() {
             <div className="bg-slate-800 p-1.5 rounded-lg">
               <i className="fas fa-graduation-cap text-white"></i>
             </div>
-            <span className="font-extrabold text-xl tracking-tight">
-              Vocal<span className="text-green-600">Odia</span>
+            <span className="font-extrabold text-xl tracking-tight text-gray-900">
+              {APP_CONFIG.NAME}
             </span>
           </div>
           <div className="flex items-center gap-6">
+            <button
+              onClick={() => router.push('/documents')}
+              className={`text-sm font-bold px-4 py-2 rounded-full border transition-all ${
+                pathname === '/documents'
+                  ? 'bg-emerald-600 text-white shadow-lg border-emerald-600'
+                  : 'text-gray-500 border-transparent hover:bg-gray-100'
+              }`}
+            >
+              <i className="fas fa-file-alt mr-2"></i>Documents
+            </button>
             {isAdmin && (
               <button
                 onClick={() => router.push(isAdminPage ? '/dashboard' : '/admin')}

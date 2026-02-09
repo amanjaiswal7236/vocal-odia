@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     // Generate scenario using AI
     const ai = new GoogleGenAI({ apiKey });
     
-    const generationPrompt = `Generate a realistic English conversation practice scenario for an intermediate English learner from Odisha, India. 
+    const generationPrompt = `Generate a realistic conversation practice scenario for an intermediate language learner. 
 
 Topic: ${topic}
 ${context ? `Additional context: ${context}` : ''}
@@ -48,7 +48,7 @@ Return ONLY a valid JSON object in this exact format:
   "image": "https://images.unsplash.com/photo-..."
 }
 
-Make it practical, relevant to Indian/Odisha context, and focused on helping learners overcome common Odia-to-English translation mistakes.`;
+Make it practical and useful for voice/conversation practice.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.0-flash-exp',

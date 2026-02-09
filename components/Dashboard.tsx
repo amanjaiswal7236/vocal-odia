@@ -90,7 +90,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       <section className="bg-gradient-to-br from-emerald-800 via-teal-900 to-slate-900 rounded-3xl p-8 md:p-10 text-white shadow-2xl relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
           <div className="max-w-lg">
-            <h1 className="text-3xl md:text-4xl font-extrabold mb-3 tracking-tight">Namaskar! 🙏</h1>
+            <h1 className="text-3xl md:text-4xl font-extrabold mb-3 tracking-tight">Welcome back</h1>
             <p className="text-emerald-100/90 text-lg md:text-xl leading-relaxed">
               {AI_AGENT.NAME}, your coach, is ready. Pick a subject and start practicing.
             </p>

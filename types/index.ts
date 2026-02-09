@@ -175,3 +175,15 @@ export interface AuthResponse {
   user: AuthUser;
 }
 
+/** Echo Writer–style free-form document (voice or typing). */
+export interface DocumentState {
+  title: string;
+  paragraphs: string[];
+}
+
+export interface SavedDocument extends DocumentState {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+}
+

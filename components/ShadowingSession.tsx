@@ -173,7 +173,7 @@ const ShadowingSession: React.FC<ShadowingSessionProps> = ({ tasks: initialTasks
           </h2>
           
           <p className="text-sm text-gray-400 font-medium italic mb-6">
-            Odia: {currentTask.translation}
+            Translation: {currentTask.translation}
           </p>
 
           {/* Word Practice Toggle */}
@@ -263,10 +263,10 @@ const ShadowingSession: React.FC<ShadowingSessionProps> = ({ tasks: initialTasks
 
       <div className="bg-green-50 p-6 rounded-2xl border border-green-100">
         <h3 className="font-bold text-green-900 text-sm mb-2 flex items-center gap-2">
-          <i className="fas fa-info-circle"></i> Priya's Tip
+          <i className="fas fa-info-circle"></i> Coach's Tip
         </h3>
         <p className="text-xs text-green-700 leading-relaxed">
-          The mirror technique helps you unlearn Odia sentence rhythms. Try to match the AI's speed exactly, especially when linking words together like "I-have-been."
+          The mirror technique helps you match natural rhythm and phrasing. Try to match the AI&apos;s speed exactly, especially when linking words together.
         </p>
       </div>
     </div>

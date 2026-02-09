@@ -6,8 +6,8 @@ import { AppProvider } from "@/lib/context/AppContext";
 import Navigation from "@/components/Navigation";
 
 export const metadata: Metadata = {
-  title: "VocalOdia - Odia-English Voice Tutor",
-  description: "AI-powered English learning platform for Odia speakers",
+  title: "Vocal – Voice Tutor",
+  description: "AI-powered voice practice and language learning",
 };
 
 export default function RootLayout({

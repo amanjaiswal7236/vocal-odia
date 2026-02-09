@@ -252,7 +252,7 @@ function ScenariosContent() {
                   <textarea
                     value={generationForm.context}
                     onChange={(e) => setGenerationForm({ ...generationForm, context: e.target.value })}
-                    placeholder="e.g., Tech startup interview, Local Odia restaurant, Clinic in Bhubaneswar"
+                    placeholder="e.g., Tech startup interview, Local restaurant, Clinic visit"
                     rows={3}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
                     disabled={isGenerating}

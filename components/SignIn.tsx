@@ -44,7 +44,7 @@ const SignIn: React.FC<SignInProps> = ({ onSuccess, onSwitchToSignUp }) => {
             <i className="fas fa-graduation-cap text-3xl"></i>
           </div>
           <h2 className="text-2xl font-black mb-2">Welcome Back</h2>
-          <p className="text-slate-200 text-sm">Sign in to continue learning</p>
+          <p className="text-slate-200 text-sm">Sign in to continue practicing</p>
         </div>
 
         <div className="p-8">

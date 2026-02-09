@@ -1,6 +1,6 @@
-# VocalOdia - Odia-English Voice Tutor (Next.js)
+# Vocal – Voice Tutor (Next.js)
 
-A modern, AI-powered English learning platform specifically designed for Odia speakers. This is a Next.js migration of the original React + Vite application with improved architecture, better error handling, and enhanced type safety.
+A modern, AI-powered voice practice and language learning platform. Real-time voice conversations with AI (Google Gemini), structured courses, shadowing, and free-form document practice. Built with Next.js, PostgreSQL, and improved type safety.
 
 ## Features
 

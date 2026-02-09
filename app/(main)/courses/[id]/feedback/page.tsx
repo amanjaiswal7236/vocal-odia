@@ -48,7 +48,7 @@ export default function CourseFeedbackPage() {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
           model: 'gemini-2.0-flash-exp',
-          contents: `Generate feedback JSON for Odia learner completing ${course.title}. Provide encouraging, constructive feedback.`,
+          contents: `Generate feedback JSON for a learner completing ${course.title}. Provide encouraging, constructive feedback.`,
           config: {
             responseMimeType: "application/json",
             responseSchema: {

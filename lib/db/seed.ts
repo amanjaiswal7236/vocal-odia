@@ -25,11 +25,11 @@ export const seedData = async () => {
     if (parseInt(scenariosCheck.rows[0].count) === 0) {
       await query(`
         INSERT INTO scenarios (title, description, icon, prompt, image) VALUES
-        ('Job Interview', 'Practice for a tech job interview at an IT park in Bhubaneswar.', 'fa-briefcase', 'You are an HR manager at a growing tech startup in Infocity, Bhubaneswar. Interview the user for a Junior Software Engineer position.', 'https://images.unsplash.com/photo-1551434678-e076c223a692?w=800&h=600&fit=crop'),
-        ('Coffee Shop Conversation', 'Practice casual conversation at a local café.', 'fa-coffee', 'You are a friendly barista at a popular coffee shop in Cuttack. Have a casual conversation with the customer about their day and recommend some local favorites.', 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=800&h=600&fit=crop'),
-        ('Market Shopping', 'Practice bargaining and shopping in a local market.', 'fa-shopping-bag', 'You are a vendor at a local market in Puri. Help the customer shop for vegetables and practice bargaining. Use local references and Odia-influenced English patterns.', 'https://images.unsplash.com/photo-1556910096-6f5e72db6803?w=800&h=600&fit=crop'),
-        ('Doctor Appointment', 'Practice describing symptoms and health concerns.', 'fa-user-doctor', 'You are a doctor at a clinic in Bhubaneswar. The patient needs to describe their symptoms. Help them use proper English medical vocabulary.', 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1f?w=800&h=600&fit=crop'),
-        ('Restaurant Ordering', 'Practice ordering food at a restaurant.', 'fa-utensils', 'You are a waiter at a restaurant serving Odia cuisine. Help the customer order food and answer questions about the menu.', 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop')
+        ('Job Interview', 'Practice for a tech job interview.', 'fa-briefcase', 'You are an HR manager at a growing tech startup. Interview the user for a Junior Software Engineer position.', 'https://images.unsplash.com/photo-1551434678-e076c223a692?w=800&h=600&fit=crop'),
+        ('Coffee Shop Conversation', 'Practice casual conversation at a local café.', 'fa-coffee', 'You are a friendly barista at a popular coffee shop. Have a casual conversation with the customer about their day and recommend some favorites.', 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=800&h=600&fit=crop'),
+        ('Market Shopping', 'Practice bargaining and shopping in a local market.', 'fa-shopping-bag', 'You are a vendor at a local market. Help the customer shop for vegetables and practice bargaining and conversation.', 'https://images.unsplash.com/photo-1556910096-6f5e72db6803?w=800&h=600&fit=crop'),
+        ('Doctor Appointment', 'Practice describing symptoms and health concerns.', 'fa-user-doctor', 'You are a doctor at a clinic. The patient needs to describe their symptoms. Help them use clear medical vocabulary.', 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1f?w=800&h=600&fit=crop'),
+        ('Restaurant Ordering', 'Practice ordering food at a restaurant.', 'fa-utensils', 'You are a waiter at a restaurant. Help the customer order food and answer questions about the menu.', 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop')
       `);
       console.log('✓ Scenarios seeded');
     } else {
@@ -42,11 +42,11 @@ export const seedData = async () => {
     if (parseInt(badgesCheck.rows[0].count) === 0) {
       await query(`
         INSERT INTO badges (name, icon, threshold) VALUES
-        ('Cuttack Silver', '🥈', 5),
-        ('Puri Gold', '🥇', 15),
-        ('Bhubaneswar Diamond', '💎', 50),
-        ('Odisha Champion', '🏆', 100),
-        ('Language Master', '🌟', 200)
+        ('Silver', '🥈', 5),
+        ('Gold', '🥇', 15),
+        ('Diamond', '💎', 50),
+        ('Champion', '🏆', 100),
+        ('Master', '🌟', 200)
       `);
       console.log('✓ Badges seeded');
     } else {
@@ -98,7 +98,7 @@ export const seedData = async () => {
       // Course 1: Foundational Fluency
       const course1Result = await query(`
         INSERT INTO courses (title, level, description, is_unlocked) 
-        VALUES ('Foundational Fluency', 'BEGINNER', 'Master the basics of English grammar while unlearning direct Odia translations.', true)
+        VALUES ('Foundational Fluency', 'BEGINNER', 'Master the basics of grammar and common phrases for everyday conversation.', true)
         RETURNING id
       `);
       const course1Id = course1Result.rows[0].id;

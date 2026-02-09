@@ -143,8 +143,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Generate a structured curriculum for an Odia-English learner for a course titled "${newCourse.title}" at ${newCourse.level} level. 
-        Focus on fixing "Odinglish" translation patterns. 
+        contents: `Generate a structured curriculum for a language learner for a course titled "${newCourse.title}" at ${newCourse.level} level. 
+        Focus on practical conversation and clear, gentle correction. 
         Return JSON containing an array of modules, where each module has lessons (id, title, objective, prompt, completed: false).`,
         config: {
           responseMimeType: "application/json",

@@ -456,5 +456,43 @@ export const contentService = {
       throw new AppError('Failed to unlock course. Please try again.', 'UNLOCK_COURSE_ERROR');
     }
   },
+
+  async getDocuments() {
+    const response = await fetchWithAuth(`${API_URL}/content/documents`);
+    return response.json();
+  },
+
+  async getDocument(id: string) {
+    const response = await fetchWithAuth(`${API_URL}/content/documents/${id}`);
+    return response.json();
+  },
+
+  async createDocument(data: { title?: string; paragraphs?: string[] }) {
+    const response = await fetchWithAuth(`${API_URL}/content/documents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: data.title ?? 'Untitled Document',
+        paragraphs: data.paragraphs ?? [],
+      }),
+    });
+    return response.json();
+  },
+
+  async updateDocument(id: string, data: { title?: string; paragraphs?: string[] }) {
+    const response = await fetchWithAuth(`${API_URL}/content/documents/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return response.json();
+  },
+
+  async deleteDocument(id: string) {
+    const response = await fetchWithAuth(`${API_URL}/content/documents/${id}`, {
+      method: 'DELETE',
+    });
+    return response.json();
+  },
 };
 
